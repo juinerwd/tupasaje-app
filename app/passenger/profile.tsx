@@ -2,6 +2,7 @@ import { QRCodeModal } from '@/components/QRCodeModal';
 import { Button, Card } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { usePassengerProfile, useUpdatePassengerProfile } from '@/hooks/usePassenger';
 import { useAuthStore } from '@/store/authStore';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,6 +12,7 @@ import {
     Alert,
     ScrollView,
     StyleSheet,
+    Switch,
     Text,
     TouchableOpacity,
     View,
@@ -37,6 +39,18 @@ export default function PassengerProfile() {
     const { user } = useAuthStore();
     const { logout, isLoggingOut } = useAuth();
     const [showQRModal, setShowQRModal] = useState(false);
+
+    const { data: passengerProfile } = usePassengerProfile();
+    const updateProfileMutation = useUpdatePassengerProfile();
+
+    const toggleAutoRecharge = async (value: boolean) => {
+        try {
+            await updateProfileMutation.mutateAsync({ autoRecharge: value });
+        } catch (error) {
+            console.error('Error toggling auto-recharge:', error);
+            Alert.alert('Error', 'No se pudo actualizar la configuración de auto-recarga');
+        }
+    };
 
     // Animated values
     const avatarScale = useSharedValue(1);
@@ -81,7 +95,7 @@ export default function PassengerProfile() {
             '¿Estás seguro que deseas cerrar sesión?',
             [
                 { text: 'Cancelar', style: 'cancel' },
-                { text: 'Cerrar Sesión', onPress: () => logout(), style: 'destructive' },
+                { text: 'Cerrar Sesión', onPress: () => logout({}), style: 'destructive' },
             ]
         );
     };
@@ -92,7 +106,7 @@ export default function PassengerProfile() {
             icon: 'create-outline',
             title: 'Editar perfil',
             subtitle: 'Actualiza tu información personal',
-            onPress: () => router.push('/(passenger)/edit-profile'),
+            onPress: () => router.push('/passenger/edit-profile' as any),
         },
         ...(user?.username ? [{
             id: 'qr-code',
@@ -106,28 +120,28 @@ export default function PassengerProfile() {
             icon: 'shield-checkmark-outline',
             title: 'Seguridad',
             subtitle: 'Cambia tu PIN y configuración',
-            onPress: () => router.push('/(passenger)/security' as any),
+            onPress: () => router.push('/passenger/security' as any),
         },
         {
             id: 'notifications',
             icon: 'notifications-outline',
             title: 'Notificaciones',
             subtitle: 'Gestiona tus preferencias',
-            onPress: () => router.push('/(passenger)/notification-settings' as any),
+            onPress: () => router.push('/passenger/notification-settings' as any),
         },
         {
             id: 'payment-methods',
             icon: 'card-outline',
             title: 'Métodos de pago',
             subtitle: 'Administra tus tarjetas',
-            onPress: () => router.push('/(passenger)/payment-methods' as any),
+            onPress: () => router.push('/passenger/payment-methods' as any),
         },
         {
             id: 'help',
             icon: 'help-circle-outline',
             title: 'Ayuda y soporte',
             subtitle: 'Obtén ayuda cuando la necesites',
-            onPress: () => router.push('/(passenger)/help' as any),
+            onPress: () => router.push('/passenger/help' as any),
         },
     ];
 
@@ -141,7 +155,7 @@ export default function PassengerProfile() {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
@@ -283,6 +297,37 @@ export default function PassengerProfile() {
                     </Card>
                 </Animated.View>
 
+                {/* Preferences Section */}
+                <Animated.View
+                    entering={FadeInUp.delay(750).duration(500)}
+                    style={styles.section}
+                >
+                    <Text style={styles.sectionTitle}>Preferencias</Text>
+                    <Card variant="elevated" style={styles.preferenceCard}>
+                        <View style={styles.preferenceRow}>
+                            <View style={styles.preferenceInfo}>
+                                <View style={styles.infoIconContainer}>
+                                    <Ionicons
+                                        name={passengerProfile?.autoRecharge ? "sync-circle" : "sync-outline"}
+                                        size={22}
+                                        color={BrandColors.primary}
+                                    />
+                                </View>
+                                <View style={styles.preferenceTextContainer}>
+                                    <Text style={styles.preferenceTitle}>Auto-recarga</Text>
+                                    <Text style={styles.preferenceSubtitle}>Recarga automática cuando el saldo es bajo</Text>
+                                </View>
+                            </View>
+                            <Switch
+                                value={passengerProfile?.autoRecharge || false}
+                                onValueChange={toggleAutoRecharge}
+                                trackColor={{ false: BrandColors.gray[200], true: BrandColors.primary }}
+                                thumbColor={BrandColors.white}
+                            />
+                        </View>
+                    </Card>
+                </Animated.View>
+
                 {/* Menu Options */}
                 <Animated.View
                     entering={FadeInUp.delay(800).duration(500)}
@@ -350,7 +395,7 @@ const styles = StyleSheet.create({
         backgroundColor: BrandColors.gray[50],
     },
     scrollContent: {
-        paddingBottom: 40,
+        paddingBottom: 20,
     },
     header: {
         paddingTop: 40,
@@ -551,5 +596,32 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: BrandColors.gray[500],
         marginTop: 24,
+    },
+    preferenceCard: {
+        padding: 16,
+    },
+    preferenceRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    preferenceInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    preferenceTextContainer: {
+        flex: 1,
+        marginRight: 12,
+    },
+    preferenceTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: BrandColors.gray[900],
+        marginBottom: 2,
+    },
+    preferenceSubtitle: {
+        fontSize: 12,
+        color: BrandColors.gray[500],
     },
 });

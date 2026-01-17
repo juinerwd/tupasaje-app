@@ -1,13 +1,20 @@
 /**
  * Format currency amount
  */
-export function formatCurrency(amount: number, currency: string = 'COP'): string {
+export function formatCurrency(amount: number | string, currency: string = 'COP'): string {
+    const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+
+    // Fallback for NaN or invalid inputs
+    if (isNaN(numericAmount)) {
+        return currency === 'COP' ? '$ 0' : '0';
+    }
+
     return new Intl.NumberFormat('es-CO', {
         style: 'currency',
         currency: currency,
         minimumFractionDigits: 0,
         maximumFractionDigits: 0,
-    }).format(amount);
+    }).format(numericAmount);
 }
 
 /**

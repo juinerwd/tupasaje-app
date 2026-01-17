@@ -63,6 +63,7 @@ export async function login(credentials: LoginCredentials): Promise<ApiResponse<
                 tokens: {
                     accessToken: response.data.accessToken,
                     refreshToken: response.data.refreshToken,
+                    sessionId: response.data.sessionId,
                 },
             },
         };
@@ -75,10 +76,17 @@ export async function login(credentials: LoginCredentials): Promise<ApiResponse<
  * Refresh access token
  */
 export async function refreshToken(refreshToken: string): Promise<ApiResponse<AuthTokens>> {
-    const response = await api.post<ApiResponse<AuthTokens>>('/auth/refresh', {
+    const response = await api.post<LoginResponse>('/auth/refresh', {
         refreshToken,
     });
-    return response.data;
+    return {
+        success: true,
+        data: {
+            accessToken: response.data.accessToken,
+            refreshToken: response.data.refreshToken,
+            sessionId: response.data.sessionId,
+        }
+    };
 }
 
 /**
@@ -98,14 +106,17 @@ export async function getProfile(): Promise<User> {
  */
 export async function logout(): Promise<ApiResponse<void>> {
     try {
-        // Try to logout on backend (will likely fail with 400 due to missing sessionId)
-        // But that's okay - the hook will still perform local logout
-        const response = await api.post<ApiResponse<void>>('/auth/logout', {});
+        const { getSessionId } = await import('@/utils/secureStorage');
+        const sessionId = await getSessionId();
+
+        if (!sessionId) {
+            return { success: true, data: undefined };
+        }
+
+        const response = await api.post<ApiResponse<void>>('/auth/logout', { sessionId });
         return response.data;
     } catch (error) {
-        // Log error but don't throw - local logout will still happen
-        console.warn('Backend logout failed (expected if sessionId not implemented):', error);
-        // Return success so local logout proceeds
+        // Return success so local logout proceeds even if backend fails
         return { success: true, data: undefined };
     }
 }

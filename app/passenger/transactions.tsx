@@ -151,7 +151,7 @@ export default function PassengerTransactions() {
     );
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <Animated.View
                 entering={FadeInDown.duration(500).springify()}
                 style={styles.header}
@@ -218,7 +218,6 @@ const styles = StyleSheet.create({
     },
     listContent: {
         padding: 20,
-        paddingBottom: 40,
     },
     transactionCard: {
         padding: 16,

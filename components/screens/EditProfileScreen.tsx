@@ -1,5 +1,7 @@
 import { Button, Card } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
+import { useUpdateDriverProfile } from '@/hooks/useConductor';
+import { useUpdatePassengerProfile } from '@/hooks/usePassenger';
 import { useUpdateProfile, useUserProfile } from '@/hooks/useProfile';
 import { checkUsernameAvailability, CheckUsernameResponse, updateUsername } from '@/services/usernameService';
 import { useAuthStore } from '@/store/authStore';
@@ -35,34 +37,10 @@ export default function EditProfile() {
     const storeUser = useAuthStore((state) => state.user);
     const { data: queryUser, isLoading: isLoadingProfile, error: profileError, refetch: refetchProfile } = useUserProfile();
     const updateProfileMutation = useUpdateProfile();
+    const updateDriverProfileMutation = useUpdateDriverProfile();
+    const updatePassengerProfileMutation = useUpdatePassengerProfile();
 
     const user = queryUser || storeUser;
-
-    if (profileError && !user) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color={BrandColors.gray[900]} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Error</Text>
-                    <View style={{ width: 40 }} />
-                </View>
-                <View style={styles.errorContainer}>
-                    <Ionicons name="alert-circle-outline" size={64} color={BrandColors.error} />
-                    <Text style={styles.errorTitle}>No se pudo cargar el perfil</Text>
-                    <Text style={styles.errorSubtitle}>
-                        Hubo un problema al obtener tu información. Por favor, intenta de nuevo.
-                    </Text>
-                    <Button
-                        title="Reintentar"
-                        onPress={() => refetchProfile()}
-                        style={styles.retryButton}
-                    />
-                </View>
-            </SafeAreaView>
-        );
-    }
 
     // Form state
     const [firstName, setFirstName] = useState(user?.firstName || '');
@@ -74,23 +52,43 @@ export default function EditProfile() {
     );
     const [showDatePicker, setShowDatePicker] = useState(false);
 
+    // Driver specific state
+    const [vehiclePlate, setVehiclePlate] = useState('');
+    const [vehicleModel, setVehicleModel] = useState('');
+    const [vehicleYear, setVehicleYear] = useState('');
+    const [vehicleColor, setVehicleColor] = useState('');
+    const [vehicleType, setVehicleType] = useState('');
+
     // Username state
     const [username, setUsername] = useState(user?.username || '');
     const [usernameAvailability, setUsernameAvailability] = useState<CheckUsernameResponse | null>(null);
     const [isCheckingUsername, setIsCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
 
-    // Update form when user data loads
+    // Initialize state from user data
     React.useEffect(() => {
-        if (user) {
-            setFirstName((prev: string) => prev || user.firstName || '');
-            setLastName((prev: string) => prev || user.lastName || '');
-            setBio((prev: string) => prev || user.bio || '');
-            setDateOfBirth((prev: string) => prev || user.dateOfBirth || '');
-            setGender((prev: string) => prev || (user.gender as any) || '');
-            setUsername((prev: string) => prev || user.username || '');
+        if (queryUser) {
+            setFirstName(queryUser.firstName || '');
+            setLastName(queryUser.lastName || '');
+            setBio(queryUser.bio || '');
+            setDateOfBirth(queryUser.dateOfBirth || '');
+            setGender(queryUser.gender as any || '');
+            setUsername(queryUser.username || '');
+
+            // Initialize driver data if applicable
+            if (queryUser.role === 'DRIVER' && (queryUser as any).driver) {
+                const driver = (queryUser as any).driver;
+                setVehiclePlate(driver.vehiclePlate || '');
+                setVehicleModel(driver.vehicleModel || '');
+                setVehicleYear(driver.vehicleYear?.toString() || '');
+                setVehicleColor(driver.vehicleColor || '');
+                setVehicleType(driver.vehicleType || '');
+            }
+        } else if (storeUser) {
+            setFirstName(storeUser.firstName || '');
+            setLastName(storeUser.lastName || '');
         }
-    }, [user]);
+    }, [queryUser, storeUser]);
 
     const genderOptions = [
         { label: 'Masculino', value: 'male' },
@@ -101,7 +99,6 @@ export default function EditProfile() {
 
     // Check username availability with debounce
     React.useEffect(() => {
-        // Don't check if username is already set (permanent)
         if (user?.username) return;
 
         if (!username || username.length < 3) {
@@ -110,7 +107,6 @@ export default function EditProfile() {
             return;
         }
 
-        // Validate format
         if (!/^[a-zA-Z0-9]+$/.test(username)) {
             setUsernameError('Solo letras y números (sin símbolos ni espacios)');
             setUsernameAvailability(null);
@@ -143,7 +139,6 @@ export default function EditProfile() {
     }, [username, user?.username]);
 
     const handleSave = async () => {
-        // Validation
         if (!firstName.trim() || !lastName.trim()) {
             Alert.alert('Error', 'El nombre y apellido son obligatorios');
             return;
@@ -164,7 +159,6 @@ export default function EditProfile() {
             return;
         }
 
-        // Username validation (only if setting for first time)
         if (!user?.username && username.trim()) {
             if (username.trim().length < 3 || username.trim().length > 20) {
                 Alert.alert('Error', 'El username debe tener entre 3 y 20 caracteres');
@@ -182,26 +176,40 @@ export default function EditProfile() {
             }
         }
 
-        // Prepare update data
+        // Prepare general profile update
         const updateData: UpdateProfileDto = {};
-
         if (firstName !== user?.firstName) updateData.firstName = firstName.trim();
         if (lastName !== user?.lastName) updateData.lastName = lastName.trim();
         if (bio !== user?.bio) updateData.bio = bio.trim() || undefined;
         if (dateOfBirth !== user?.dateOfBirth) updateData.dateOfBirth = dateOfBirth || undefined;
         if (gender !== user?.gender) updateData.gender = gender || undefined;
 
-        // Check if there are changes
+        // Prepare role-specific update
+        let roleUpdateData: any = null;
+        if (user?.role === 'DRIVER') {
+            const driver = (user as any).driver || {};
+            const newDriverData: any = {};
+            if (vehiclePlate !== driver.vehiclePlate) newDriverData.vehiclePlate = vehiclePlate.trim();
+            if (vehicleModel !== driver.vehicleModel) newDriverData.vehicleModel = vehicleModel.trim();
+            if (vehicleYear !== driver.vehicleYear?.toString()) newDriverData.vehicleYear = parseInt(vehicleYear) || undefined;
+            if (vehicleColor !== driver.vehicleColor) newDriverData.vehicleColor = vehicleColor.trim();
+            if (vehicleType !== driver.vehicleType) newDriverData.vehicleType = vehicleType.trim();
+
+            if (Object.keys(newDriverData).length > 0) {
+                roleUpdateData = newDriverData;
+            }
+        }
+
         const hasProfileChanges = Object.keys(updateData).length > 0;
+        const hasRoleChanges = !!roleUpdateData;
         const hasUsernameChange = !user?.username && username.trim();
 
-        if (!hasProfileChanges && !hasUsernameChange) {
+        if (!hasProfileChanges && !hasUsernameChange && !hasRoleChanges) {
             Alert.alert('Sin cambios', 'No has realizado ningún cambio');
             return;
         }
 
         try {
-            // Update username first if setting for first time
             if (hasUsernameChange) {
                 Alert.alert(
                     '⚠️ Username Permanente',
@@ -214,16 +222,23 @@ export default function EditProfile() {
                             onPress: async () => {
                                 try {
                                     await updateUsername(username.trim());
-
-                                    // Update profile if there are changes
                                     if (hasProfileChanges) {
                                         await updateProfileMutation.mutateAsync(updateData);
                                     }
-
+                                    if (hasRoleChanges) {
+                                        if (user?.role === 'DRIVER') {
+                                            await updateDriverProfileMutation.mutateAsync(roleUpdateData);
+                                        }
+                                    }
                                     Alert.alert(
                                         'Éxito',
                                         'Tu perfil ha sido actualizado correctamente',
-                                        [{ text: 'OK', onPress: () => router.back() }]
+                                        [{
+                                            text: 'OK', onPress: () => {
+                                                const profilePath = user?.role === 'DRIVER' ? '/conductor/profile' : '/passenger/profile';
+                                                router.replace(profilePath as any);
+                                            }
+                                        }]
                                     );
                                 } catch (error: any) {
                                     const errorMessage = error.response?.data?.message || 'Error al actualizar el perfil';
@@ -236,13 +251,24 @@ export default function EditProfile() {
                 return;
             }
 
-            // Only update profile if no username change
-            if (hasProfileChanges) {
-                await updateProfileMutation.mutateAsync(updateData);
+            if (hasProfileChanges || hasRoleChanges) {
+                if (hasProfileChanges) {
+                    await updateProfileMutation.mutateAsync(updateData);
+                }
+                if (hasRoleChanges) {
+                    if (user?.role === 'DRIVER') {
+                        await updateDriverProfileMutation.mutateAsync(roleUpdateData);
+                    }
+                }
                 Alert.alert(
                     'Éxito',
                     'Tu perfil ha sido actualizado correctamente',
-                    [{ text: 'OK', onPress: () => router.back() }]
+                    [{
+                        text: 'OK', onPress: () => {
+                            const profilePath = user?.role === 'DRIVER' ? '/conductor/profile' : '/passenger/profile';
+                            router.replace(profilePath as any);
+                        }
+                    }]
                 );
             }
         } catch (error: any) {
@@ -252,7 +278,6 @@ export default function EditProfile() {
     };
 
     const handleCancel = () => {
-        // Check if there are unsaved changes
         const hasChanges =
             firstName !== user?.firstName ||
             lastName !== user?.lastName ||
@@ -270,11 +295,11 @@ export default function EditProfile() {
                 ]
             );
         } else {
-            router.replace('/(passenger)/profile');
+            const profilePath = user?.role === 'DRIVER' ? '/conductor/profile' : '/passenger/profile';
+            router.replace(profilePath as any);
         }
     };
 
-    // Format date to YYYY-MM-DD
     const formatDate = (date: Date): string => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -282,22 +307,38 @@ export default function EditProfile() {
         return `${year}-${month}-${day}`;
     };
 
-    // Handle date change from picker
     const handleDateChange = (event: any, selectedDate?: Date) => {
-        setShowDatePicker(Platform.OS === 'ios'); // Keep open on iOS, close on Android
+        setShowDatePicker(Platform.OS === 'ios');
         if (selectedDate) {
             setDateOfBirth(formatDate(selectedDate));
         }
     };
 
-    // Parse date string to Date object
-    const parseDate = (dateString: string): Date => {
-        if (dateString) {
-            const [year, month, day] = dateString.split('-').map(Number);
-            return new Date(year, month - 1, day);
-        }
-        return new Date();
-    };
+    if (profileError && !user) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                        <Ionicons name="arrow-back" size={24} color={BrandColors.gray[900]} />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Error</Text>
+                    <View style={{ width: 40 }} />
+                </View>
+                <View style={styles.errorContainer}>
+                    <Ionicons name="alert-circle-outline" size={64} color={BrandColors.error} />
+                    <Text style={styles.errorTitle}>No se pudo cargar el perfil</Text>
+                    <Text style={styles.errorSubtitle}>
+                        Hubo un problema al obtener tu información. Por favor, intenta de nuevo.
+                    </Text>
+                    <Button
+                        title="Reintentar"
+                        onPress={() => refetchProfile()}
+                        style={styles.retryButton}
+                    />
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     if (isLoadingProfile && !user) {
         return (
@@ -478,6 +519,92 @@ export default function EditProfile() {
                                 <Text style={styles.charCount}>{bio.length}/500</Text>
                             </View>
 
+                            {/* Driver Specific Fields: Vehicle Info */}
+                            {user?.role === 'DRIVER' && (
+                                <View style={styles.roleSection}>
+                                    <View style={styles.sectionDivider} />
+                                    <Text style={styles.roleSectionTitle}>Información del Vehículo</Text>
+
+                                    {/* Vehicle Plate */}
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Placa del Vehículo</Text>
+                                        <View style={styles.inputContainer}>
+                                            <Ionicons name="card-outline" size={20} color={BrandColors.gray[400]} />
+                                            <TextInput
+                                                style={styles.input}
+                                                value={vehiclePlate}
+                                                onChangeText={setVehiclePlate}
+                                                placeholder="Ej: ABC-123"
+                                                placeholderTextColor={BrandColors.gray[400]}
+                                                autoCapitalize="characters"
+                                            />
+                                        </View>
+                                    </View>
+
+                                    {/* Vehicle Model */}
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Modelo / Marca</Text>
+                                        <View style={styles.inputContainer}>
+                                            <Ionicons name="car-outline" size={20} color={BrandColors.gray[400]} />
+                                            <TextInput
+                                                style={styles.input}
+                                                value={vehicleModel}
+                                                onChangeText={setVehicleModel}
+                                                placeholder="Ej: Chevrolet Onix"
+                                                placeholderTextColor={BrandColors.gray[400]}
+                                            />
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.row}>
+                                        {/* Vehicle Year */}
+                                        <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                                            <Text style={styles.inputLabel}>Año</Text>
+                                            <View style={styles.inputContainer}>
+                                                <TextInput
+                                                    style={styles.input}
+                                                    value={vehicleYear}
+                                                    onChangeText={setVehicleYear}
+                                                    placeholder="2023"
+                                                    placeholderTextColor={BrandColors.gray[400]}
+                                                    keyboardType="numeric"
+                                                    maxLength={4}
+                                                />
+                                            </View>
+                                        </View>
+
+                                        {/* Vehicle Color */}
+                                        <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                                            <Text style={styles.inputLabel}>Color</Text>
+                                            <View style={styles.inputContainer}>
+                                                <TextInput
+                                                    style={styles.input}
+                                                    value={vehicleColor}
+                                                    onChangeText={setVehicleColor}
+                                                    placeholder="Blanco"
+                                                    placeholderTextColor={BrandColors.gray[400]}
+                                                />
+                                            </View>
+                                        </View>
+                                    </View>
+
+                                    {/* Vehicle Type */}
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Tipo de Vehículo</Text>
+                                        <View style={styles.inputContainer}>
+                                            <TextInput
+                                                style={styles.input}
+                                                value={vehicleType}
+                                                onChangeText={setVehicleType}
+                                                placeholder="Ej: Sedan, SUV, Moto"
+                                                placeholderTextColor={BrandColors.gray[400]}
+                                            />
+                                        </View>
+                                    </View>
+                                    <View style={styles.sectionDivider} />
+                                </View>
+                            )}
+
                             {/* Date of Birth */}
                             <View style={styles.inputGroup}>
                                 <Text style={styles.inputLabel}>Fecha de Nacimiento</Text>
@@ -514,8 +641,8 @@ export default function EditProfile() {
                                     mode="date"
                                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                                     onChange={handleDateChange}
-                                    maximumDate={new Date()} // No permitir fechas futuras
-                                    minimumDate={new Date(1900, 0, 1)} // Fecha mínima razonable
+                                    maximumDate={new Date()}
+                                    minimumDate={new Date(1900, 0, 1)}
                                     locale="es-ES"
                                 />
                             )}
@@ -772,6 +899,7 @@ const styles = StyleSheet.create({
     actionsContainer: {
         paddingHorizontal: 20,
         gap: 12,
+        marginTop: 8,
     },
     errorContainer: {
         flex: 1,
@@ -795,5 +923,25 @@ const styles = StyleSheet.create({
     },
     retryButton: {
         minWidth: 200,
+    },
+    roleSection: {
+        marginTop: 8,
+    },
+    sectionDivider: {
+        height: 1,
+        backgroundColor: BrandColors.gray[200],
+        marginVertical: 24,
+    },
+    roleSectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: BrandColors.primary,
+        marginBottom: 20,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    row: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
 });

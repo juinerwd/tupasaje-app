@@ -46,7 +46,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     setTokens: async (tokens) => {
         try {
-            await saveTokens(tokens.accessToken, tokens.refreshToken);
+            await saveTokens(tokens.accessToken, tokens.refreshToken, tokens.sessionId);
         } catch (error) {
             console.error('Error saving tokens:', error);
             throw error;
@@ -59,7 +59,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     login: async (user, tokens) => {
         try {
-            await saveTokens(tokens.accessToken, tokens.refreshToken);
+            await saveTokens(tokens.accessToken, tokens.refreshToken, tokens.sessionId);
             set({
                 user,
                 isAuthenticated: true,

@@ -62,9 +62,9 @@ export default function Step5Summary() {
                                                 text: 'Continuar',
                                                 onPress: () => {
                                                     if (userType === UserRole.PASSENGER) {
-                                                        router.replace('/(passenger)/dashboard');
+                                                        router.replace('/passenger/dashboard');
                                                     } else {
-                                                        router.replace('/(conductor)/dashboard');
+                                                        router.replace('/conductor/dashboard');
                                                     }
                                                 },
                                             },

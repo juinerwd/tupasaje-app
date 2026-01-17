@@ -2,6 +2,7 @@ import { BrandColors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
+    ActivityIndicator,
     StyleSheet,
     Text,
     TextInput,
@@ -18,6 +19,9 @@ interface InputProps extends TextInputProps {
     rightIcon?: keyof typeof Ionicons.glyphMap;
     onRightIconPress?: () => void;
     containerStyle?: any;
+    inputContainerStyle?: any;
+    rightIconStyle?: any;
+    rightIconLoading?: boolean;
 }
 
 export function Input({
@@ -28,6 +32,9 @@ export function Input({
     rightIcon,
     onRightIconPress,
     containerStyle,
+    inputContainerStyle,
+    rightIconStyle,
+    rightIconLoading,
     style,
     secureTextEntry,
     ...props
@@ -40,16 +47,17 @@ export function Input({
 
     return (
         <View style={[styles.container, containerStyle]}>
-            {label && <Text style={styles.label}>{label}</Text>}
+            {!!label && <Text style={styles.label}>{label}</Text>}
 
             <View
                 style={[
                     styles.inputContainer,
                     isFocused && styles.inputContainerFocused,
                     error && styles.inputContainerError,
+                    inputContainerStyle,
                 ]}
             >
-                {leftIcon && (
+                {!!leftIcon && (
                     <Ionicons
                         name={leftIcon}
                         size={20}
@@ -67,7 +75,7 @@ export function Input({
                     {...props}
                 />
 
-                {showPasswordToggle && (
+                {!!showPasswordToggle && (
                     <TouchableOpacity
                         onPress={() => setIsPasswordVisible(!isPasswordVisible)}
                         style={styles.rightIcon}
@@ -80,23 +88,27 @@ export function Input({
                     </TouchableOpacity>
                 )}
 
-                {rightIcon && !showPasswordToggle && (
+                {!!rightIcon && !showPasswordToggle && (
                     <TouchableOpacity
                         onPress={onRightIconPress}
-                        style={styles.rightIcon}
-                        disabled={!onRightIconPress}
+                        style={[styles.rightIcon, rightIconStyle]}
+                        disabled={!onRightIconPress || rightIconLoading}
                     >
-                        <Ionicons
-                            name={rightIcon}
-                            size={20}
-                            color={error ? BrandColors.error : BrandColors.gray[400]}
-                        />
+                        {rightIconLoading ? (
+                            <ActivityIndicator size="small" color={rightIconStyle?.color || BrandColors.white} />
+                        ) : (
+                            <Ionicons
+                                name={rightIcon}
+                                size={20}
+                                color={error ? BrandColors.error : (rightIconStyle?.color || BrandColors.gray[400])}
+                            />
+                        )}
                     </TouchableOpacity>
                 )}
             </View>
 
-            {error && <Text style={styles.errorText}>{error}</Text>}
-            {helperText && !error && <Text style={styles.helperText}>{helperText}</Text>}
+            {!!error && <Text style={styles.errorText}>{error}</Text>}
+            {!!helperText && !error && <Text style={styles.helperText}>{helperText}</Text>}
         </View>
     );
 }

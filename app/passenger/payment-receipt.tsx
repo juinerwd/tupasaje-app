@@ -67,11 +67,11 @@ export default function PaymentReceiptScreen() {
     });
 
     const handleGoToDashboard = () => {
-        router.replace('/(passenger)/dashboard');
+        router.replace('/passenger/dashboard');
     };
 
     const handleViewHistory = () => {
-        router.replace('/(passenger)/transactions');
+        router.replace('/passenger/transactions');
     };
 
     return (

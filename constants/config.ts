@@ -22,4 +22,5 @@ export const storageKeys = {
     refreshToken: 'refresh_token',
     firstTimeLaunch: 'first_time_launch',
     userProfile: 'user_profile',
+    sessionId: 'session_id',
 };

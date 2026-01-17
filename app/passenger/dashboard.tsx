@@ -1,26 +1,30 @@
 import { QRCodeModal } from '@/components/QRCodeModal';
 import { RechargeModal } from '@/components/RechargeModal';
 import { RechargeSuccessModal } from '@/components/RechargeSuccessModal';
-import { Card, ProgressBar } from '@/components/ui';
+import { Card, ProgressBar, Skeleton } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
-import * as notificationService from '@/services/notificationService';
-import * as passengerService from '@/services/passengerService';
-import * as walletService from '@/services/walletService';
+import { useUnreadNotificationsCount } from '@/hooks/useNotifications';
+import { usePassengerProfile, useUpdatePassengerProfile } from '@/hooks/usePassenger';
+import { useProfileCompleteness } from '@/hooks/useProfile';
+import { useClaimPromotion, usePromotions } from '@/hooks/usePromotions';
+import { useWalletTransactions } from '@/hooks/useRecharge';
+import { useWalletBalance } from '@/hooks/useWallet';
 import { useAuthStore } from '@/store/authStore';
-import { PassengerProfile, Transaction, TransactionType, WalletBalance } from '@/types';
+import { TransactionType } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import Animated, {
     FadeInDown,
@@ -42,13 +46,53 @@ export default function PassengerDashboard() {
     const router = useRouter();
     const { user } = useAuthStore();
     const [refreshing, setRefreshing] = useState(false);
-    const [loading, setLoading] = useState(true);
 
-    // State for API data
-    const [balance, setBalance] = useState<WalletBalance | null>(null);
-    const [passengerProfile, setPassengerProfile] = useState<PassengerProfile | null>(null);
-    const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
-    const [unreadCount, setUnreadCount] = useState(0);
+    // TanStack Query Hooks
+    const { data: balance, isLoading: isLoadingBalance, refetch: refetchBalance } = useWalletBalance();
+    const { data: passengerProfile, isLoading: isLoadingPassenger, refetch: refetchPassenger } = usePassengerProfile();
+    const { data: transactionsData, isLoading: isLoadingTransactions, refetch: refetchTransactions } = useWalletTransactions();
+    const { data: notificationData, isLoading: isLoadingNotifications, refetch: refetchNotifications } = useUnreadNotificationsCount();
+    const { data: completenessData, isLoading: isLoadingCompleteness, refetch: refetchCompleteness } = useProfileCompleteness();
+    const { data: promotions, isLoading: isLoadingPromotions } = usePromotions();
+    const updateProfileMutation = useUpdatePassengerProfile();
+    const claimPromotionMutation = useClaimPromotion();
+
+    const recentTransactions = useMemo(() => transactionsData?.slice(0, 3) || [], [transactionsData]);
+    const unreadCount = notificationData?.unreadCount || 0;
+    const loading = isLoadingBalance || isLoadingPassenger || isLoadingTransactions || isLoadingNotifications;
+
+    const currentBalance = useMemo(() => parseFloat(balance?.balance || '0'), [balance]);
+    const isLowBalance = useMemo(() => currentBalance < 5000 && !passengerProfile?.autoRecharge, [currentBalance, passengerProfile?.autoRecharge]);
+
+    const weeklySpending = useMemo(() => {
+        if (!transactionsData) return [];
+        const days = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+        const spending = new Array(7).fill(0);
+        const now = new Date();
+
+        transactionsData.forEach(tx => {
+            const txDate = new Date(tx.createdAt);
+            const diffDays = Math.floor((now.getTime() - txDate.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays < 7 && tx.type === TransactionType.PAYMENT) {
+                const dayIndex = txDate.getDay();
+                spending[dayIndex] += Math.abs(parseFloat(tx.amount));
+            }
+        });
+
+        // Reorder to have today as the last day
+        const todayIndex = now.getDay();
+        const orderedSpending = [];
+        for (let i = 0; i < 7; i++) {
+            const index = (todayIndex - 6 + i + 7) % 7;
+            orderedSpending.push({
+                day: days[index],
+                amount: spending[index],
+            });
+        }
+        return orderedSpending;
+    }, [transactionsData]);
+
+    const maxSpending = useMemo(() => Math.max(...weeklySpending.map(s => s.amount), 1000), [weeklySpending]);
 
     // Modals state
     const [qrModalVisible, setQrModalVisible] = useState(false);
@@ -62,46 +106,14 @@ export default function PassengerDashboard() {
 
     // Fetch dashboard data
     const fetchDashboardData = useCallback(async () => {
-        try {
-            setLoading(true);
-
-            // Fetch data individually to catch specific errors
-            const balanceData = await walletService.getBalance().catch(err => {
-                console.error('Error fetching balance:', err);
-                return null;
-            });
-
-            const transactionsData = await walletService.getTransactions().catch(err => {
-                console.error('Error fetching transactions:', err);
-                return [];
-            });
-
-            const notificationData = await notificationService.getUnreadCount().catch(err => {
-                console.error('Error fetching notifications:', err);
-                return { unreadCount: 0 };
-            });
-
-            const passengerData = await passengerService.getProfile().catch(err => {
-                console.error('Error fetching passenger profile:', err);
-                return null;
-            });
-
-            setBalance(balanceData);
-            setPassengerProfile(passengerData);
-            // Get only the 3 most recent transactions
-            setRecentTransactions(transactionsData.slice(0, 3));
-            setUnreadCount(notificationData.unreadCount);
-        } catch (error) {
-            console.error('Error fetching dashboard data:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    // Load data on mount
-    useEffect(() => {
-        fetchDashboardData();
-    }, [fetchDashboardData]);
+        await Promise.all([
+            refetchBalance(),
+            refetchPassenger(),
+            refetchTransactions(),
+            refetchNotifications(),
+            refetchCompleteness(),
+        ]);
+    }, [refetchBalance, refetchPassenger, refetchTransactions, refetchNotifications, refetchCompleteness]);
 
     // Notification pulse animation
     useEffect(() => {
@@ -141,20 +153,34 @@ export default function PassengerDashboard() {
         if (action === 'recharge') {
             setRechargeModalVisible(true);
         } else if (action === 'pay') {
-            router.push('/(passenger)/qr-payment');
+            router.push('/passenger/qr-payment');
+        } else if (action === 'pay-transport') {
+            router.push('/passenger/pay-transport');
+        } else if (action === 'transfer') {
+            router.push('/passenger/transfer' as any);
         } else if (action === 'emergency') {
-            router.push('/(passenger)/emergency-code' as any);
+            router.push('/passenger/emergency-code' as any);
         }
     };
 
     const handleRechargeSuccess = () => {
-        // In test mode, we might want to show success immediately
-        // For now, just refresh the dashboard data
         fetchDashboardData();
     };
 
+    const handlePromotionPress = (promotion: any) => {
+        if (promotion.actionType === 'RECHARGE') {
+            setRechargeModalVisible(true);
+        } else if (promotion.actionType === 'REFERRAL') {
+            Alert.alert('Referir', 'Comparte tu código con un amigo para ganar pasajes gratis.');
+        } else if (promotion.actionType === 'INTERNAL' && promotion.actionValue) {
+            router.push(promotion.actionValue as any);
+        } else {
+            claimPromotionMutation.mutate(promotion.id);
+        }
+    };
+
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
@@ -187,7 +213,7 @@ export default function PassengerDashboard() {
                     </View>
                     <AnimatedTouchable
                         style={[styles.notificationButton, notificationStyle]}
-                        onPress={() => router.push('/(passenger)/notifications')}
+                        onPress={() => router.push('/passenger/notifications')}
                     >
                         <View style={styles.notificationBadge}>
                             <Ionicons name="notifications" size={24} color={BrandColors.gray[700]} />
@@ -209,8 +235,8 @@ export default function PassengerDashboard() {
                     style={styles.balanceCard}
                 >
                     <Text style={styles.balanceLabel}>Saldo disponible</Text>
-                    {loading ? (
-                        <ActivityIndicator size="large" color={BrandColors.white} style={{ marginBottom: 28 }} />
+                    {isLoadingBalance ? (
+                        <Skeleton width={200} height={42} borderRadius={8} style={{ marginBottom: 28, backgroundColor: 'rgba(255,255,255,0.2)' }} />
                     ) : balance ? (
                         <Text style={styles.balanceAmount}>
                             {formatCurrency(parseFloat(balance.balance || '0'))}
@@ -258,27 +284,50 @@ export default function PassengerDashboard() {
                         </AnimatedTouchable>
                     </View>
 
+
+
                     {/* Decorative circles */}
                     <View style={styles.decorativeCircle1} />
                     <View style={styles.decorativeCircle2} />
                 </AnimatedLinearGradient>
 
+                {/* Low Balance Warning */}
+                {isLowBalance && (
+                    <Animated.View
+                        entering={FadeInDown.duration(600)}
+                        style={styles.warningBanner}
+                    >
+                        <Ionicons name="alert-circle" size={20} color={BrandColors.warning} />
+                        <Text style={styles.warningBannerText}>
+                            Saldo bajo. Activa la auto-recarga para no quedarte sin pasaje.
+                        </Text>
+                    </Animated.View>
+                )}
+
                 {/* Profile Completeness */}
-                {user && user.profileCompleteness < 100 && (
+                {isLoadingCompleteness ? (
+                    <View style={styles.completenessSection}>
+                        <Card variant="elevated" style={styles.completenessCard}>
+                            <Skeleton width="100%" height={60} />
+                        </Card>
+                    </View>
+                ) : completenessData && !completenessData.completed && (
                     <Animated.View
                         entering={FadeInDown.delay(300).duration(600).springify()}
                         style={styles.completenessSection}
                     >
                         <Card variant="elevated" style={styles.completenessCard}>
                             <View style={styles.completenessHeader}>
-                                <View>
+                                <View style={{ flex: 1, marginRight: 10 }}>
                                     <Text style={styles.completenessTitle}>Completa tu perfil</Text>
                                     <Text style={styles.completenessSubtitle}>
-                                        {user.profileCompleteness}% completado
+                                        {completenessData.missing?.length > 0
+                                            ? `Te falta: ${completenessData.missing.slice(0, 2).join(', ')}${completenessData.missing.length > 2 ? '...' : ''}`
+                                            : `${completenessData.completeness}% completado`}
                                     </Text>
                                 </View>
                                 <TouchableOpacity
-                                    onPress={() => router.push('/(passenger)/edit-profile')}
+                                    onPress={() => router.push('/passenger/edit-profile')}
                                     style={styles.completeButton}
                                 >
                                     <Text style={styles.completeButtonText}>Completar</Text>
@@ -286,7 +335,7 @@ export default function PassengerDashboard() {
                                 </TouchableOpacity>
                             </View>
                             <ProgressBar
-                                progress={user.profileCompleteness / 100}
+                                progress={completenessData.completeness / 100}
                                 color={BrandColors.primary}
                                 height={8}
                                 style={styles.progressBar}
@@ -306,7 +355,11 @@ export default function PassengerDashboard() {
                             style={styles.statGradient}
                         >
                             <Ionicons name="bus-outline" size={24} color={BrandColors.primary} />
-                            <Text style={styles.statValue}>{passengerProfile?.totalTrips || 0}</Text>
+                            {isLoadingPassenger ? (
+                                <Skeleton width={40} height={24} style={{ marginTop: 8, marginBottom: 4 }} />
+                            ) : (
+                                <Text style={styles.statValue}>{passengerProfile?.totalTrips || 0}</Text>
+                            )}
                             <Text style={styles.statLabel}>Viajes</Text>
                         </LinearGradient>
                     </Animated.View>
@@ -320,9 +373,13 @@ export default function PassengerDashboard() {
                             style={styles.statGradient}
                         >
                             <Ionicons name="wallet-outline" size={24} color={BrandColors.secondary} />
-                            <Text style={styles.statValue}>
-                                {formatCurrency(passengerProfile?.totalSpent || 0)}
-                            </Text>
+                            {isLoadingPassenger ? (
+                                <Skeleton width={60} height={24} style={{ marginTop: 8, marginBottom: 4 }} />
+                            ) : (
+                                <Text style={styles.statValue}>
+                                    {formatCurrency(passengerProfile?.totalSpent || 0)}
+                                </Text>
+                            )}
                             <Text style={styles.statLabel}>Gastado</Text>
                         </LinearGradient>
                     </Animated.View>
@@ -336,13 +393,137 @@ export default function PassengerDashboard() {
                             style={styles.statGradient}
                         >
                             <Ionicons name="star-outline" size={24} color={BrandColors.warning} />
-                            <Text style={styles.statValue}>
-                                {passengerProfile?.averageRating?.toFixed(1) || '0.0'}
-                            </Text>
+                            {isLoadingPassenger ? (
+                                <Skeleton width={40} height={24} style={{ marginTop: 8, marginBottom: 4 }} />
+                            ) : (
+                                <Text style={styles.statValue}>
+                                    {passengerProfile?.averageRating?.toFixed(1) || '0.0'}
+                                </Text>
+                            )}
                             <Text style={styles.statLabel}>Rating</Text>
                         </LinearGradient>
                     </Animated.View>
                 </View>
+
+                {/* Activity Summary */}
+                <Animated.View
+                    entering={FadeInDown.delay(650).duration(600).springify()}
+                    style={styles.section}
+                >
+                    <Card variant="elevated" style={styles.activityCard}>
+                        <View style={styles.activityHeader}>
+                            <Text style={styles.activityTitle}>Resumen semanal</Text>
+                            <View style={styles.savingsBadge}>
+                                <Ionicons name="leaf" size={14} color={BrandColors.success} />
+                                <Text style={styles.savingsText}>Ahorraste {formatCurrency(12500)}</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.chartContainer}>
+                            {weeklySpending.map((item, index) => (
+                                <View key={index} style={styles.chartBarContainer}>
+                                    <View style={styles.chartBarWrapper}>
+                                        <View
+                                            style={[
+                                                styles.chartBar,
+                                                { height: `${(item.amount / maxSpending) * 100}%` }
+                                            ]}
+                                        />
+                                    </View>
+                                    <Text style={styles.chartDay}>{item.day}</Text>
+                                </View>
+                            ))}
+                        </View>
+                    </Card>
+                </Animated.View>
+
+                {/* Emergency Code Status */}
+                {!isLoadingPassenger && (
+                    <Animated.View
+                        entering={FadeInDown.delay(700).duration(600).springify()}
+                        style={styles.emergencySection}
+                    >
+                        <Card variant="elevated" style={[
+                            styles.emergencyCard,
+                            passengerProfile?.hasActiveEmergencyCode ? styles.emergencyActive : styles.emergencyInactive
+                        ]}>
+                            <View style={styles.emergencyContent}>
+                                <View style={[
+                                    styles.emergencyIconContainer,
+                                    passengerProfile?.hasActiveEmergencyCode ? styles.emergencyIconActive : styles.emergencyIconInactive
+                                ]}>
+                                    <Ionicons
+                                        name={passengerProfile?.hasActiveEmergencyCode ? "shield-checkmark" : "alert-circle"}
+                                        size={24}
+                                        color={passengerProfile?.hasActiveEmergencyCode ? BrandColors.success : BrandColors.warning}
+                                    />
+                                </View>
+                                <View style={styles.emergencyTextContainer}>
+                                    <Text style={styles.emergencyTitle}>
+                                        {passengerProfile?.hasActiveEmergencyCode ? 'Código Activo' : 'Sin Código'}
+                                    </Text>
+                                    <Text style={styles.emergencySubtitle} numberOfLines={2}>
+                                        {passengerProfile?.hasActiveEmergencyCode
+                                            ? 'Listo para usar sin conexión'
+                                            : 'Paga sin batería o internet'}
+                                    </Text>
+                                </View>
+                                <TouchableOpacity
+                                    onPress={() => router.push('/passenger/emergency-code')}
+                                    style={[
+                                        styles.emergencyButton,
+                                        passengerProfile?.hasActiveEmergencyCode ? styles.emergencyButtonView : styles.emergencyButtonGenerate
+                                    ]}
+                                >
+                                    <Ionicons
+                                        name={passengerProfile?.hasActiveEmergencyCode ? "eye-outline" : "add"}
+                                        size={18}
+                                        color={passengerProfile?.hasActiveEmergencyCode ? BrandColors.primary : BrandColors.white}
+                                    />
+                                    <Text style={[
+                                        styles.emergencyButtonText,
+                                        passengerProfile?.hasActiveEmergencyCode ? styles.emergencyButtonTextView : styles.emergencyButtonTextGenerate
+                                    ]}>
+                                        {passengerProfile?.hasActiveEmergencyCode ? 'Ver' : 'Generar'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </Card>
+                    </Animated.View>
+                )}
+
+                {/* Promotions Banner */}
+                {!isLoadingPromotions && promotions && promotions.length > 0 && (
+                    <View style={styles.section}>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            pagingEnabled
+                            contentContainerStyle={styles.promotionsList}
+                        >
+                            {promotions.map((promo, index) => (
+                                <AnimatedTouchable
+                                    key={promo.id}
+                                    entering={FadeInRight.delay(500 + index * 100).duration(600)}
+                                    style={[styles.promotionCard, { backgroundColor: promo.backgroundColor }]}
+                                    onPress={() => handlePromotionPress(promo)}
+                                >
+                                    <View style={styles.promotionContent}>
+                                        <View style={styles.promotionTextContainer}>
+                                            <Text style={styles.promotionTitle}>{promo.title}</Text>
+                                            <Text style={styles.promotionSubtitle}>{promo.description}</Text>
+                                            <View style={styles.promotionActionBadge}>
+                                                <Text style={styles.promotionActionText}>{promo.actionLabel}</Text>
+                                                <Ionicons name="chevron-forward" size={12} color={BrandColors.primary} />
+                                            </View>
+                                        </View>
+                                        <Ionicons name={promo.icon as any} size={40} color={BrandColors.primary} />
+                                    </View>
+                                </AnimatedTouchable>
+                            ))}
+                        </ScrollView>
+                    </View>
+                )}
 
                 {/* Quick Actions */}
                 <View style={styles.section}>
@@ -356,7 +537,39 @@ export default function PassengerDashboard() {
                         <AnimatedTouchable
                             entering={FadeInUp.delay(700).duration(600).springify()}
                             style={styles.quickActionCard}
-                            onPress={() => router.push('/(passenger)/scan-qr' as any)}
+                            onPress={() => handleActionPress('pay-transport')}
+                        >
+                            <LinearGradient
+                                colors={['#ffffff', '#f8f9fa']}
+                                style={styles.quickActionGradient}
+                            >
+                                <View style={styles.quickActionIconContainer}>
+                                    <Ionicons name="bus-outline" size={32} color={BrandColors.primary} />
+                                </View>
+                                <Text style={styles.quickActionText}>Pagar Pasaje</Text>
+                            </LinearGradient>
+                        </AnimatedTouchable>
+
+                        <AnimatedTouchable
+                            entering={FadeInUp.delay(750).duration(600).springify()}
+                            style={styles.quickActionCard}
+                            onPress={() => handleActionPress('transfer')}
+                        >
+                            <LinearGradient
+                                colors={['#ffffff', '#f8f9fa']}
+                                style={styles.quickActionGradient}
+                            >
+                                <View style={styles.quickActionIconContainer}>
+                                    <Ionicons name="swap-horizontal-outline" size={32} color={BrandColors.primary} />
+                                </View>
+                                <Text style={styles.quickActionText}>Transferir</Text>
+                            </LinearGradient>
+                        </AnimatedTouchable>
+
+                        <AnimatedTouchable
+                            entering={FadeInUp.delay(800).duration(600).springify()}
+                            style={styles.quickActionCard}
+                            onPress={() => router.push('/passenger/scan-qr' as any)}
                         >
                             <LinearGradient
                                 colors={['#ffffff', '#f8f9fa']}
@@ -372,7 +585,7 @@ export default function PassengerDashboard() {
                         <AnimatedTouchable
                             entering={FadeInUp.delay(800).duration(600).springify()}
                             style={styles.quickActionCard}
-                            onPress={() => router.push('/(passenger)/transactions')}
+                            onPress={() => router.push('/passenger/transactions')}
                         >
                             <LinearGradient
                                 colors={['#ffffff', '#f8f9fa']}
@@ -405,6 +618,7 @@ export default function PassengerDashboard() {
                             <AnimatedTouchable
                                 entering={FadeInUp.delay(900).duration(600).springify()}
                                 style={styles.quickActionCard}
+                                onPress={() => router.push('/passenger/payment-methods')}
                             >
                                 <LinearGradient
                                     colors={['#ffffff', '#f8f9fa']}
@@ -421,7 +635,7 @@ export default function PassengerDashboard() {
                         <AnimatedTouchable
                             entering={FadeInUp.delay(1000).duration(600).springify()}
                             style={styles.quickActionCard}
-                            onPress={() => router.push('/(passenger)/favorite-locations' as any)}
+                            onPress={() => router.push('/passenger/favorite-locations' as any)}
                         >
                             <LinearGradient
                                 colors={['#ffffff', '#f8f9fa']}
@@ -446,7 +660,12 @@ export default function PassengerDashboard() {
                                 <View style={[styles.quickActionIconContainer, { backgroundColor: BrandColors.error + '15' }]}>
                                     <Ionicons name="alert-circle-outline" size={32} color={BrandColors.error} />
                                 </View>
-                                <Text style={[styles.quickActionText, { color: BrandColors.error }]}>Emergencia</Text>
+                                <View>
+                                    <Text style={[styles.quickActionText, { color: BrandColors.error }]}>Emergencia</Text>
+                                    {passengerProfile?.emergencyCounter && passengerProfile.emergencyCounter > 0 ? (
+                                        <Text style={styles.emergencyStatusText}>Código activo</Text>
+                                    ) : null}
+                                </View>
                             </LinearGradient>
                         </AnimatedTouchable>
                     </View>
@@ -460,7 +679,7 @@ export default function PassengerDashboard() {
                             style={styles.sectionHeader}
                         >
                             <Text style={styles.sectionTitle}>Tus lugares</Text>
-                            <TouchableOpacity onPress={() => router.push('/(passenger)/favorite-locations' as any)}>
+                            <TouchableOpacity onPress={() => router.push('/passenger/favorite-locations' as any)}>
                                 <Text style={styles.seeAllText}>Ver todos</Text>
                             </TouchableOpacity>
                         </Animated.View>
@@ -494,7 +713,7 @@ export default function PassengerDashboard() {
                         style={styles.sectionHeader}
                     >
                         <Text style={styles.sectionTitle}>Transacciones recientes</Text>
-                        <TouchableOpacity onPress={() => router.push('/(passenger)/transactions')}>
+                        <TouchableOpacity onPress={() => router.push('/passenger/transactions')}>
                             <Text style={styles.seeAllText}>Ver todas</Text>
                         </TouchableOpacity>
                     </Animated.View>
@@ -589,6 +808,173 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: BrandColors.gray[50],
     },
+    scrollContent: {
+        padding: 20,
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    greeting: {
+        fontSize: 16,
+        color: BrandColors.gray[600],
+        fontWeight: '500',
+    },
+    userName: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: BrandColors.gray[900],
+        marginTop: 4,
+    },
+    usernameContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 6,
+        gap: 4,
+    },
+    usernameText: {
+        fontSize: 14,
+        color: BrandColors.primary,
+        fontWeight: '600',
+    },
+    verifiedBadge: {
+        marginLeft: 2,
+    },
+    notificationButton: {
+        padding: 8,
+    },
+    notificationBadge: {
+        position: 'relative',
+    },
+    badge: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: BrandColors.error,
+        borderWidth: 2,
+        borderColor: BrandColors.gray[50],
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 4,
+    },
+    badgeText: {
+        color: BrandColors.white,
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    balanceCard: {
+        padding: 28,
+        marginBottom: 28,
+        borderRadius: 20,
+        overflow: 'hidden',
+        elevation: 8,
+        shadowColor: BrandColors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+    },
+    balanceLabel: {
+        fontSize: 15,
+        color: BrandColors.white,
+        opacity: 0.95,
+        marginBottom: 8,
+        fontWeight: '500',
+        letterSpacing: 0.5,
+    },
+    balanceAmount: {
+        fontSize: 42,
+        fontWeight: 'bold',
+        color: BrandColors.white,
+        marginBottom: 28,
+        letterSpacing: -1,
+    },
+    noWalletContainer: {
+        marginBottom: 28,
+        alignItems: 'center',
+    },
+    noWalletText: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: BrandColors.white,
+        marginBottom: 4,
+    },
+    noWalletSubtext: {
+        fontSize: 14,
+        color: BrandColors.white,
+        opacity: 0.8,
+    },
+    balanceActions: {
+        flexDirection: 'row',
+        gap: 20,
+        zIndex: 1,
+    },
+    balanceActionButton: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    actionIconContainer: {
+        marginBottom: 10,
+    },
+    actionIconGradient: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+    },
+    actionText: {
+        fontSize: 15,
+        color: BrandColors.white,
+        fontWeight: '600',
+        letterSpacing: 0.3,
+    },
+
+    warningBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: BrandColors.warning + '15',
+        padding: 12,
+        borderRadius: 12,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: BrandColors.warning + '30',
+        gap: 10,
+    },
+    warningBannerText: {
+        flex: 1,
+        fontSize: 13,
+        color: BrandColors.gray[700],
+        lineHeight: 18,
+        fontWeight: '500',
+    },
+    decorativeCircle1: {
+        position: 'absolute',
+        width: 150,
+        height: 150,
+        borderRadius: 75,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        top: -50,
+        right: -30,
+    },
+    decorativeCircle2: {
+        position: 'absolute',
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        bottom: -20,
+        left: -20,
+    },
     completenessSection: {
         marginBottom: 24,
     },
@@ -659,190 +1045,139 @@ const styles = StyleSheet.create({
         color: BrandColors.gray[600],
         fontWeight: '500',
     },
-    favoriteLocationsList: {
-        gap: 12,
-        paddingRight: 20,
+    emergencySection: {
+        marginBottom: 28,
     },
-    favoriteLocationCard: {
+    emergencyCard: {
+        padding: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+    },
+    emergencyActive: {
+        backgroundColor: BrandColors.white,
+        borderColor: `${BrandColors.success}30`,
+    },
+    emergencyInactive: {
+        backgroundColor: BrandColors.white,
+        borderColor: `${BrandColors.warning}30`,
+    },
+    emergencyContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: BrandColors.white,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: BrandColors.gray[200],
-        width: 160,
+        gap: 12,
     },
-    favoriteLocationIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: BrandColors.primary + '15',
+    emergencyIconContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 10,
     },
-    favoriteLocationName: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: BrandColors.gray[800],
+    emergencyIconActive: {
+        backgroundColor: `${BrandColors.success}10`,
+    },
+    emergencyIconInactive: {
+        backgroundColor: `${BrandColors.warning}10`,
+    },
+    emergencyTextContainer: {
         flex: 1,
     },
-    scrollContent: {
-        padding: 20,
-        paddingBottom: 40,
+    emergencyTitle: {
+        fontSize: 15,
+        fontWeight: 'bold',
+        color: BrandColors.gray[900],
+        marginBottom: 2,
     },
-    header: {
+    emergencySubtitle: {
+        fontSize: 12,
+        color: BrandColors.gray[500],
+        lineHeight: 16,
+    },
+    emergencyButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 10,
+        gap: 6,
+    },
+    emergencyButtonGenerate: {
+        backgroundColor: BrandColors.primary,
+    },
+    emergencyButtonView: {
+        backgroundColor: BrandColors.white,
+        borderWidth: 1,
+        borderColor: BrandColors.gray[200],
+    },
+    emergencyButtonText: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    emergencyButtonTextGenerate: {
+        color: BrandColors.white,
+    },
+    emergencyButtonTextView: {
+        color: BrandColors.primary,
+    },
+    activityCard: {
+        padding: 20,
+        backgroundColor: BrandColors.white,
+        borderRadius: 20,
+    },
+    activityHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 20,
     },
-    greeting: {
+    activityTitle: {
         fontSize: 16,
-        color: BrandColors.gray[600],
-        fontWeight: '500',
-    },
-    userName: {
-        fontSize: 28,
         fontWeight: 'bold',
         color: BrandColors.gray[900],
-        marginTop: 4,
     },
-    usernameContainer: {
+    savingsBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 6,
+        backgroundColor: BrandColors.success + '10',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
         gap: 4,
     },
-    usernameText: {
-        fontSize: 14,
-        color: BrandColors.primary,
+    savingsText: {
+        fontSize: 12,
+        color: BrandColors.success,
         fontWeight: '600',
     },
-    verifiedBadge: {
-        marginLeft: 2,
-    },
-    notificationButton: {
-        padding: 8,
-    },
-    notificationBadge: {
-        position: 'relative',
-    },
-    badge: {
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        minWidth: 18,
-        height: 18,
-        borderRadius: 9,
-        backgroundColor: BrandColors.error,
-        borderWidth: 2,
-        borderColor: BrandColors.gray[50],
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 4,
-    },
-    badgeText: {
-        color: BrandColors.white,
-        fontSize: 10,
-        fontWeight: 'bold',
-    },
-    emptyText: {
-        textAlign: 'center',
-        color: BrandColors.gray[500],
-        fontSize: 14,
-        marginTop: 20,
-    },
-    balanceCard: {
-        padding: 28,
-        marginBottom: 28,
-        borderRadius: 20,
-        overflow: 'hidden',
-        elevation: 8,
-        shadowColor: BrandColors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
-    },
-    decorativeCircle1: {
-        position: 'absolute',
-        width: 150,
-        height: 150,
-        borderRadius: 75,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        top: -50,
-        right: -30,
-    },
-    decorativeCircle2: {
-        position: 'absolute',
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        bottom: -20,
-        left: -20,
-    },
-    balanceLabel: {
-        fontSize: 15,
-        color: BrandColors.white,
-        opacity: 0.95,
-        marginBottom: 8,
-        fontWeight: '500',
-        letterSpacing: 0.5,
-    },
-    balanceAmount: {
-        fontSize: 42,
-        fontWeight: 'bold',
-        color: BrandColors.white,
-        marginBottom: 28,
-        letterSpacing: -1,
-    },
-    noWalletContainer: {
-        marginBottom: 28,
-        alignItems: 'center',
-    },
-    noWalletText: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: BrandColors.white,
-        marginBottom: 4,
-    },
-    noWalletSubtext: {
-        fontSize: 14,
-        color: BrandColors.white,
-        opacity: 0.8,
-    },
-    balanceActions: {
+    chartContainer: {
         flexDirection: 'row',
-        gap: 20,
-        zIndex: 1,
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        height: 120,
+        paddingTop: 10,
     },
-    balanceActionButton: {
+    chartBarContainer: {
+        alignItems: 'center',
         flex: 1,
-        alignItems: 'center',
     },
-    actionIconContainer: {
-        marginBottom: 10,
+    chartBarWrapper: {
+        height: 80,
+        width: 12,
+        backgroundColor: BrandColors.gray[100],
+        borderRadius: 6,
+        justifyContent: 'flex-end',
+        overflow: 'hidden',
     },
-    actionIconGradient: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
+    chartBar: {
+        width: '100%',
+        backgroundColor: BrandColors.primary,
+        borderRadius: 6,
     },
-    actionText: {
-        fontSize: 15,
-        color: BrandColors.white,
+    chartDay: {
+        fontSize: 11,
+        color: BrandColors.gray[500],
+        marginTop: 8,
         fontWeight: '600',
-        letterSpacing: 0.3,
     },
     section: {
         marginBottom: 28,
@@ -863,6 +1198,58 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: BrandColors.primary,
         fontWeight: '600',
+    },
+    promotionsList: {
+        paddingRight: 20,
+        gap: 16,
+    },
+    promotionCard: {
+        width: 300,
+        borderRadius: 20,
+        padding: 20,
+        height: 120,
+        justifyContent: 'center',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+    },
+    promotionContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    promotionTextContainer: {
+        flex: 1,
+        marginRight: 12,
+    },
+    promotionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: BrandColors.gray[900],
+        marginBottom: 4,
+    },
+    promotionSubtitle: {
+        fontSize: 13,
+        color: BrandColors.gray[600],
+        fontWeight: '500',
+    },
+    promotionActionBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: BrandColors.white,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        marginTop: 8,
+        alignSelf: 'flex-start',
+        gap: 4,
+    },
+    promotionActionText: {
+        fontSize: 12,
+        color: BrandColors.primary,
+        fontWeight: '700',
     },
     quickActions: {
         flexDirection: 'row',
@@ -902,6 +1289,42 @@ const styles = StyleSheet.create({
     },
     qrActionIcon: {
         backgroundColor: `${BrandColors.primary}20`,
+    },
+    emergencyStatusText: {
+        fontSize: 11,
+        color: BrandColors.error,
+        fontWeight: '500',
+        marginTop: 2,
+    },
+    favoriteLocationsList: {
+        paddingRight: 20,
+        gap: 12,
+    },
+    favoriteLocationCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: BrandColors.white,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: BrandColors.gray[200],
+        width: 160,
+    },
+    favoriteLocationIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: BrandColors.primary + '15',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
+    },
+    favoriteLocationName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: BrandColors.gray[800],
+        flex: 1,
     },
     transactionCard: {
         padding: 16,
@@ -957,5 +1380,11 @@ const styles = StyleSheet.create({
     },
     transactionAmountNegative: {
         color: BrandColors.error,
+    },
+    emptyText: {
+        textAlign: 'center',
+        color: BrandColors.gray[500],
+        fontSize: 14,
+        marginTop: 20,
     },
 });

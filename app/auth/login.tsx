@@ -42,11 +42,11 @@ export default function LoginScreen() {
                         // Navigate based on user role
                         const user = result.user;
                         if (user.role === UserRole.PASSENGER) {
-                            router.replace('/(passenger)/dashboard');
+                            router.replace('/passenger/dashboard');
                         } else if (user.role === UserRole.DRIVER) {
-                            router.replace('/(conductor)/dashboard');
+                            router.replace('/conductor/dashboard');
                         } else {
-                            router.replace('/(tabs)');
+                            router.replace('/passenger/dashboard');
                         }
                     },
                     onError: (error) => {
@@ -133,7 +133,10 @@ export default function LoginScreen() {
                     />
 
                     {/* Forgot PIN */}
-                    <TouchableOpacity style={styles.forgotButton}>
+                    <TouchableOpacity
+                        style={styles.forgotButton}
+                        onPress={() => router.push('/auth/forgot-pin')}
+                    >
                         <Text style={styles.forgotText}>¿Olvidaste tu PIN?</Text>
                     </TouchableOpacity>
                 </View>

@@ -146,7 +146,6 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         padding: 24,
-        paddingBottom: 40,
     },
     iconContainer: {
         alignItems: 'center',

@@ -1,4 +1,8 @@
 import { BrandColors } from '@/constants/theme';
+import { useTransferFunds } from '@/hooks/useRecharge';
+import { useWalletBalance } from '@/hooks/useWallet';
+import { scanQRCode } from '@/services/usernameService';
+import { getUserById } from '@/services/userService';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -15,7 +19,7 @@ import {
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// Mock data - esto vendrá del QR y la API
+// Conductor info interface
 interface ConductorInfo {
     id: number;
     name: string;
@@ -26,48 +30,73 @@ interface ConductorInfo {
 
 export default function PaymentConfirmationScreen() {
     const router = useRouter();
-    const { qrData } = useLocalSearchParams<{ qrData: string }>();
+    const { qrData, userId, amount: amountParam, transportType } = useLocalSearchParams<{
+        qrData?: string;
+        userId?: string;
+        amount: string;
+        transportType: string
+    }>();
 
+    const { data: balanceData } = useWalletBalance();
+    const { mutate: transfer, isPending: isProcessing } = useTransferFunds();
     const [isLoading, setIsLoading] = useState(true);
-    const [isProcessing, setIsProcessing] = useState(false);
     const [conductorInfo, setConductorInfo] = useState<ConductorInfo | null>(null);
-    const [amount, setAmount] = useState(5000); // Monto fijo por ahora
-    const [balance, setBalance] = useState(50000); // Mock balance
+    const [error, setError] = useState<string | null>(null);
+
+    const amount = parseFloat(amountParam || '0');
+    const balance = typeof balanceData?.balance === 'string'
+        ? parseFloat(balanceData.balance)
+        : (balanceData?.balance || 0);
 
     useEffect(() => {
-        // Simular carga de información del conductor desde el QR
         const loadConductorInfo = async () => {
+            if (!qrData && !userId) {
+                console.log('PaymentConfirmation: Missing qrData and userId');
+                setError('No se proporcionó información del conductor.');
+                setIsLoading(false);
+                return;
+            }
+            console.log('PaymentConfirmation: Loading info for', { qrData, userId });
+
             try {
                 setIsLoading(true);
+                setError(null);
+                let response;
 
-                // Aquí iría la llamada a la API para obtener info del conductor
-                // const response = await paymentService.getConductorInfo(qrData);
+                if (qrData) {
+                    response = await scanQRCode(qrData);
+                } else if (userId) {
+                    response = await getUserById(userId);
+                }
+                console.log('PaymentConfirmation: Response received', response);
 
-                // Mock data
-                await new Promise(resolve => setTimeout(resolve, 1000));
-
-                setConductorInfo({
-                    id: 123,
-                    name: 'Juan Pérez',
-                    vehicle: 'Toyota Corolla',
-                    plate: 'ABC-123',
-                    rating: 4.8,
-                });
-            } catch (error) {
-                Alert.alert(
-                    'Error',
-                    'No se pudo obtener la información del conductor. Por favor, intenta nuevamente.',
-                    [{ text: 'OK', onPress: () => router.back() }]
-                );
+                if (response) {
+                    // Map API response to ConductorInfo
+                    setConductorInfo({
+                        id: response.id,
+                        name: `${response.firstName} ${response.lastName}`,
+                        vehicle: response.driver?.vehicleType || 'Transporte',
+                        plate: response.driver?.vehiclePlate || 'N/A',
+                        rating: response.driver?.averageRating || 4.8,
+                    });
+                } else {
+                    setError('No se pudo encontrar la información del conductor.');
+                }
+            } catch (err: any) {
+                console.error('Error loading conductor info:', err);
+                const message = err.response?.data?.message || err.message || 'Error al cargar información';
+                setError(message);
             } finally {
                 setIsLoading(false);
             }
         };
 
         loadConductorInfo();
-    }, [qrData]);
+    }, [qrData, userId]);
 
     const handleConfirmPayment = async () => {
+        if (!conductorInfo) return;
+
         // Validar saldo suficiente
         if (balance < amount) {
             Alert.alert(
@@ -77,42 +106,41 @@ export default function PaymentConfirmationScreen() {
                     { text: 'Cancelar', style: 'cancel' },
                     {
                         text: 'Recargar',
-                        onPress: () => router.push('/(passenger)/recharge' as any),
+                        onPress: () => router.push('/passenger/recharge' as any),
                     },
                 ]
             );
             return;
         }
 
-        try {
-            setIsProcessing(true);
-
-            // Aquí iría la llamada a la API para procesar el pago
-            // const response = await paymentService.payTransport(qrData);
-
-            // Simular procesamiento
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Navegar a la pantalla de recibo
-            router.replace({
-                pathname: '/(passenger)/payment-receipt' as any,
-                params: {
-                    transactionId: 'TXN-' + Date.now(),
-                    amount: amount.toString(),
-                    conductorName: conductorInfo?.name || '',
-                    vehicle: conductorInfo?.vehicle || '',
-                    plate: conductorInfo?.plate || '',
+        transfer(
+            {
+                toUserId: conductorInfo.id,
+                amount: amount,
+                description: `Pago de transporte: ${transportType}`,
+            },
+            {
+                onSuccess: (response) => {
+                    router.replace({
+                        pathname: '/passenger/payment-receipt' as any,
+                        params: {
+                            transactionId: response.transactionId,
+                            amount: amount.toString(),
+                            conductorName: conductorInfo.name,
+                            vehicle: conductorInfo.vehicle,
+                            plate: conductorInfo.plate,
+                        },
+                    });
                 },
-            });
-        } catch (error) {
-            Alert.alert(
-                'Error en el Pago',
-                'No se pudo procesar el pago. Por favor, intenta nuevamente.',
-                [{ text: 'OK' }]
-            );
-        } finally {
-            setIsProcessing(false);
-        }
+                onError: (error: any) => {
+                    Alert.alert(
+                        'Error en el Pago',
+                        error?.response?.data?.message || 'No se pudo procesar el pago. Por favor, intenta nuevamente.',
+                        [{ text: 'OK' }]
+                    );
+                },
+            }
+        );
     };
 
     const handleCancel = () => {
@@ -138,7 +166,22 @@ export default function PaymentConfirmationScreen() {
     }
 
     if (!conductorInfo) {
-        return null;
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.loadingContainer}>
+                    <Ionicons name="alert-circle-outline" size={64} color={BrandColors.danger} />
+                    <Text style={[styles.loadingText, { color: BrandColors.danger }]}>
+                        {error || 'No se pudo encontrar la información del conductor.'}
+                    </Text>
+                    <TouchableOpacity
+                        style={[styles.confirmButton, { marginTop: 20, paddingHorizontal: 30 }]}
+                        onPress={() => router.back()}
+                    >
+                        <Text style={styles.confirmButtonText}>Volver</Text>
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
+        );
     }
 
     const newBalance = balance - amount;
@@ -176,6 +219,11 @@ export default function PaymentConfirmationScreen() {
                     <View style={styles.divider} />
 
                     <View style={styles.vehicleInfo}>
+                        <View style={styles.infoRow}>
+                            <Ionicons name="bus-outline" size={20} color={BrandColors.gray[600]} />
+                            <Text style={styles.infoLabel}>Transporte:</Text>
+                            <Text style={[styles.infoValue, { textTransform: 'capitalize' }]}>{transportType}</Text>
+                        </View>
                         <View style={styles.infoRow}>
                             <Ionicons name="car-outline" size={20} color={BrandColors.gray[600]} />
                             <Text style={styles.infoLabel}>Vehículo:</Text>

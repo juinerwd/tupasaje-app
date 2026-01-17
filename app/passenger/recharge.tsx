@@ -1,10 +1,12 @@
 import { Button, Card, ErrorMessage } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
+import { useFictitiousRecharge } from '@/hooks/useRecharge';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+    Alert,
     ScrollView,
     StyleSheet,
     Text,
@@ -20,13 +22,14 @@ export default function RechargeScreen() {
     const router = useRouter();
     const [amount, setAmount] = useState('');
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
+    const { mutate: recharge, isPending: isLoading } = useFictitiousRecharge();
     const [error, setError] = useState('');
 
     const paymentMethods = [
         { id: 'pse', name: 'PSE', icon: 'card-outline' as keyof typeof Ionicons.glyphMap },
         { id: 'card', name: 'Tarjeta', icon: 'card-outline' as keyof typeof Ionicons.glyphMap },
         { id: 'cash', name: 'Efectivo', icon: 'cash-outline' as keyof typeof Ionicons.glyphMap },
+        { id: 'fictitious', name: 'Saldo Ficticio (Beta)', icon: 'flask-outline' as keyof typeof Ionicons.glyphMap },
     ];
 
     const handleQuickAmount = (value: number) => {
@@ -45,15 +48,21 @@ export default function RechargeScreen() {
             return;
         }
 
-        setIsLoading(true);
         setError('');
 
-        // Simular recarga (aquí iría la llamada al backend)
-        setTimeout(() => {
-            setIsLoading(false);
-            router.back();
-            // Aquí mostrarías un mensaje de éxito
-        }, 2000);
+        recharge(
+            { amount: parseInt(amount) },
+            {
+                onSuccess: () => {
+                    Alert.alert('Éxito', 'Recarga realizada correctamente', [
+                        { text: 'OK', onPress: () => router.back() },
+                    ]);
+                },
+                onError: (err: any) => {
+                    setError(err?.response?.data?.message || 'Error al realizar la recarga');
+                },
+            }
+        );
     };
 
     return (

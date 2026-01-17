@@ -3,15 +3,23 @@ import { configToMilliseconds, getAutoLogoutConfig } from '@/config/autoLogoutCo
 import { BrandColors } from '@/constants/theme';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import { useAuthStore } from '@/store/authStore';
+import { UserRole } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs, useRouter } from 'expo-router';
+import { Redirect, Tabs, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PassengerLayout() {
+    const { user, logout } = useAuthStore();
     const [showAutoLogoutMessage, setShowAutoLogoutMessage] = useState(false);
-    const { logout } = useAuthStore();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+
+    // Role-based access control
+    if (user && user.role === UserRole.DRIVER) {
+        return <Redirect href="/conductor/dashboard" />;
+    }
 
     // AUTO LOGOUT SETTINGS
     const autoLogoutConfig = getAutoLogoutConfig();
@@ -36,12 +44,19 @@ export default function PassengerLayout() {
                     tabBarActiveTintColor: BrandColors.primary,
                     tabBarInactiveTintColor: BrandColors.gray[500],
                     headerShown: false,
+                    tabBarHideOnKeyboard: true,
                     tabBarStyle: {
                         borderTopWidth: 1,
                         borderTopColor: BrandColors.gray[200],
-                        paddingBottom: 8,
+                        backgroundColor: BrandColors.white,
+                        paddingBottom: Math.max(insets.bottom, 8),
                         paddingTop: 8,
-                        height: 60,
+                        height: 60 + Math.max(insets.bottom, 8),
+                    },
+                    tabBarLabelStyle: {
+                        fontSize: 12,
+                        fontWeight: '500',
+                        marginBottom: 4,
                     },
                 }}
             >
@@ -170,6 +185,12 @@ export default function PassengerLayout() {
                 />
                 <Tabs.Screen
                     name="help"
+                    options={{
+                        href: null // Ocultar de los tabs
+                    }}
+                />
+                <Tabs.Screen
+                    name="transfer"
                     options={{
                         href: null // Ocultar de los tabs
                     }}

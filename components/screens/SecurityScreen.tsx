@@ -1,7 +1,8 @@
 import { Card } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import * as authService from '@/services/authService';
-import { AuthSession } from '@/types';
+import { useAuthStore } from '@/store/authStore';
+import { AuthSession, UserRole } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -19,17 +20,22 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SecurityScreen() {
+    const { user } = useAuthStore();
     const router = useRouter();
     const [sessions, setSessions] = useState<AuthSession[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [isBiometricsEnabled, setIsBiometricsEnabled] = useState(false);
+
+    const isConductor = user?.role === UserRole.DRIVER;
+    const basePath = isConductor ? '/conductor' : '/passenger';
 
     const fetchSessions = useCallback(async () => {
         try {
             setLoading(true);
             const response = await authService.getSessions();
             if (response.success && response.data) {
-                setSessions(response.data.sessions);
+                setSessions(response.data.sessions || []);
             }
         } catch (error) {
             console.error('Error fetching sessions:', error);
@@ -61,7 +67,7 @@ export default function SecurityScreen() {
                         try {
                             const response = await authService.revokeSession(sessionId);
                             if (response.success) {
-                                setSessions(prev => prev.filter(s => s.id !== sessionId));
+                                setSessions(prev => (prev || []).filter(s => s.id !== sessionId));
                             }
                         } catch (error) {
                             Alert.alert('Error', 'No se pudo cerrar la sesión.');
@@ -110,7 +116,7 @@ export default function SecurityScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.replace('/(passenger)/profile')} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.replace(`${basePath}/profile` as any)} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={BrandColors.gray[900]} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Seguridad</Text>
@@ -133,7 +139,7 @@ export default function SecurityScreen() {
                     <Card variant="outlined" style={styles.menuCard}>
                         <TouchableOpacity
                             style={styles.menuItem}
-                            onPress={() => router.push('/(passenger)/change-pin' as any)}
+                            onPress={() => router.push(`${basePath}/change-pin` as any)}
                         >
                             <View style={[styles.iconContainer, { backgroundColor: BrandColors.primary + '15' }]}>
                                 <Ionicons name="key-outline" size={22} color={BrandColors.primary} />
@@ -155,7 +161,18 @@ export default function SecurityScreen() {
                                 <Text style={styles.menuItemTitle}>Biometría</Text>
                                 <Text style={styles.menuItemSubtitle}>Usa tu huella o rostro para entrar</Text>
                             </View>
-                            <Text style={styles.statusBadge}>Próximamente</Text>
+                            <TouchableOpacity
+                                onPress={() => setIsBiometricsEnabled(!isBiometricsEnabled)}
+                                style={[
+                                    styles.toggleContainer,
+                                    isBiometricsEnabled && styles.toggleContainerActive
+                                ]}
+                            >
+                                <View style={[
+                                    styles.toggleCircle,
+                                    isBiometricsEnabled && styles.toggleCircleActive
+                                ]} />
+                            </TouchableOpacity>
                         </View>
                     </Card>
                 </Animated.View>
@@ -378,5 +395,25 @@ const styles = StyleSheet.create({
     },
     accountSection: {
         marginTop: 32,
+    },
+    toggleContainer: {
+        width: 44,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: BrandColors.gray[200],
+        padding: 2,
+        justifyContent: 'center',
+    },
+    toggleContainerActive: {
+        backgroundColor: BrandColors.secondary,
+    },
+    toggleCircle: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: BrandColors.white,
+    },
+    toggleCircleActive: {
+        alignSelf: 'flex-end',
     },
 });

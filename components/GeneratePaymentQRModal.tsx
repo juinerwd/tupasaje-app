@@ -227,7 +227,7 @@ export function GeneratePaymentQRModal({ visible, onClose, walletId }: GenerateP
 
                                     {/* Amount */}
                                     <Text style={styles.qrAmount}>
-                                        {formatCurrency(generatedQR.amount)}
+                                        {generatedQR?.amount ? formatCurrency(generatedQR.amount) : '$ 0'}
                                     </Text>
 
                                     {/* Countdown */}

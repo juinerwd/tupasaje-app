@@ -146,7 +146,7 @@ export default function WalletScreen() {
 
                     <TouchableOpacity
                         style={styles.actionButton}
-                        onPress={() => router.push('/(passenger)/qr-payment')}
+                        onPress={() => router.push('/passenger/qr-payment')}
                     >
                         <View style={styles.actionIcon}>
                             <Ionicons name="qr-code" size={24} color={BrandColors.primary} />
@@ -159,7 +159,7 @@ export default function WalletScreen() {
             <View style={styles.content}>
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Transacciones Recientes</Text>
-                    <TouchableOpacity onPress={() => router.push('/(passenger)/transactions')}>
+                    <TouchableOpacity onPress={() => router.push('/passenger/transactions')}>
                         <Text style={styles.seeAll}>Ver todas</Text>
                     </TouchableOpacity>
                 </View>

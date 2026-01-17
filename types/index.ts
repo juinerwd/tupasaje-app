@@ -55,6 +55,7 @@ export interface UpdateProfileDto {
 export interface AuthTokens {
     accessToken: string;
     refreshToken: string;
+    sessionId?: string;
 }
 
 // Login credentials
@@ -67,6 +68,7 @@ export interface LoginCredentials {
 export interface LoginResponse {
     accessToken: string;
     refreshToken: string;
+    sessionId: string;
     user: User;
 }
 
@@ -133,6 +135,7 @@ export interface PassengerProfile {
     // Emergency
     emergencyUsedAt?: string;
     emergencyCounter: number;
+    hasActiveEmergencyCode?: boolean;
     createdAt: string;
     updatedAt: string;
 }
@@ -144,6 +147,56 @@ export interface UpdatePassengerProfileDto {
     autoRechargeThreshold?: number;
     autoRechargeAmount?: number;
     savedAddresses?: any[];
+}
+
+// Driver Profile
+export interface DriverProfile {
+    id: number;
+    userId: number;
+    user: {
+        id: number;
+        documentId: string;
+        firstName: string;
+        lastName: string;
+        fullName: string;
+        email: string;
+        phoneNumber: string;
+        avatar?: string;
+    };
+    isAvailable: boolean;
+    lastAvailableAt?: string;
+    vehiclePlate?: string;
+    vehicleModel?: string;
+    vehicleYear?: number;
+    vehicleColor?: string;
+    vehicleType?: string;
+    currentRoute?: string;
+    totalTrips: number;
+    totalWithdrawals: number;
+    lastWithdrawalAt?: string;
+    averageRating: number;
+    totalRatings: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// Update Driver Profile DTO
+export interface UpdateDriverProfileDto {
+    vehiclePlate?: string;
+    vehicleModel?: string;
+    vehicleYear?: number;
+    vehicleColor?: string;
+    vehicleType?: string;
+}
+
+// Driver Statistics
+export interface DriverStatistics {
+    totalEarnings: number;
+    availableBalance: number;
+    totalWithdrawals: number;
+    lastWithdrawalAt?: string;
+    totalTrips: number;
+    averageRating: number;
 }
 
 // Wallet
@@ -182,6 +235,7 @@ export enum TransactionType {
     PAYMENT = 'PAYMENT',
     REFUND = 'REFUND',
     REVERSAL = 'REVERSAL',
+    WITHDRAWAL = 'WITHDRAWAL',
 }
 
 // Transaction status
@@ -235,6 +289,14 @@ export interface TransactionFilters {
     offset?: number;
 }
 
+// Driver Rides Response
+export interface DriverRidesResponse {
+    rides: Transaction[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
 // Recharge DTO
 export interface RechargeDto {
     amount: number;
@@ -258,7 +320,19 @@ export interface TransferDto {
 
 // Transfer Response
 export interface TransferResponse {
-    transaction: Transaction;
+    transactionId: string;
+    amount: number;
+    fee: number;
+    netAmount: number;
+    status: string;
+    fromUser: {
+        id: number;
+        name: string;
+    };
+    toUser: {
+        id: number;
+        name: string;
+    };
 }
 
 // Notification types
@@ -542,6 +616,11 @@ export interface UpdatePaymentMethodDto {
     isActive?: boolean;
 }
 
+export interface UpdatePaymentMethodDto {
+    isDefault?: boolean;
+    isActive?: boolean;
+}
+
 
 // ============================================
 // SECURITY & SESSION TYPES
@@ -579,3 +658,60 @@ export interface ResetPinDto {
     confirmNewPin: string;
     otpCode?: string;
 }
+
+// ============================================
+// PROMOTION TYPES
+// ============================================
+
+export interface Promotion {
+    id: string;
+    title: string;
+    description: string;
+    icon: string;
+    backgroundColor: string;
+    actionLabel: string;
+    actionType: 'RECHARGE' | 'REFERRAL' | 'EXTERNAL' | 'INTERNAL';
+    actionValue?: string;
+    expiresAt?: string;
+}
+
+// ============================================
+// WITHDRAWAL METHOD TYPES
+// ============================================
+
+export enum WithdrawalMethodType {
+    BANK_ACCOUNT = 'BANK_ACCOUNT',
+    NEQUI = 'NEQUI',
+    DAVIPLATA = 'DAVIPLATA',
+}
+
+export interface WithdrawalMethod {
+    id: string;
+    userId: number;
+    type: WithdrawalMethodType;
+    bankName?: string;
+    accountNumber: string;
+    accountType?: string;
+    holderName: string;
+    holderDni: string;
+    isDefault: boolean;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CreateWithdrawalMethodDto {
+    type: WithdrawalMethodType;
+    bankName?: string;
+    accountNumber: string;
+    accountType?: string;
+    holderName: string;
+    holderDni: string;
+    isDefault?: boolean;
+}
+
+export interface UpdateWithdrawalMethodDto {
+    isDefault?: boolean;
+    isActive?: boolean;
+}
+

@@ -1,6 +1,7 @@
 import { BrandColors } from '@/constants/theme';
 import { generateQRCode, GenerateQRResponse } from '@/services/usernameService';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
@@ -47,12 +48,30 @@ export function QRCodeModal({ visible, onClose, username, userName }: QRCodeModa
     const loadQRCode = async () => {
         setIsLoading(true);
         setError(null);
+
+        // Try to load from cache first
+        try {
+            const cachedQR = await AsyncStorage.getItem(`qr_code_${username}`);
+            if (cachedQR) {
+                setQrData(JSON.parse(cachedQR));
+                // If we have cache, we can show it immediately but still try to refresh
+                setIsLoading(false);
+            }
+        } catch (err) {
+            console.warn('Error loading QR from cache:', err);
+        }
+
         try {
             const response = await generateQRCode('300', 'base64');
             setQrData(response);
+            // Save to cache
+            await AsyncStorage.setItem(`qr_code_${username}`, JSON.stringify(response));
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Error al generar el código QR');
             console.error('Error generating QR:', err);
+            // Only show error if we don't have cached data
+            if (!qrData) {
+                setError(err.response?.data?.message || 'Error al generar el código QR. Verifica tu conexión.');
+            }
         } finally {
             setIsLoading(false);
         }

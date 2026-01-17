@@ -52,7 +52,7 @@ export const generateQRCode = async (size?: string, format?: string): Promise<Ge
  * Get user by username (for QR scanning)
  */
 export const getUserByUsername = async (username: string) => {
-    const response = await api.get(`/users/${username}`);
+    const response = await api.get(`/users/search/username/${username}`);
     return response.data;
 };
 

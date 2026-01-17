@@ -57,9 +57,9 @@ export default function Index() {
                 if (hasTokens && user) {
                     // User is authenticated, navigate to appropriate dashboard
                     if (user.role === UserRole.PASSENGER) {
-                        router.replace('/(passenger)/dashboard');
+                        router.replace('/passenger/dashboard');
                     } else if (user.role === UserRole.DRIVER) {
-                        router.replace('/(conductor)/dashboard');
+                        router.replace('/conductor/dashboard');
                     } else {
                         // Fallback to splash if role is unknown
                         router.replace('/splash');

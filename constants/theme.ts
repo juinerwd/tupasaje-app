@@ -30,6 +30,7 @@ export const BrandColors = {
   success: '#10b981',
   warning: '#f59e0b',
   info: '#3b82f6',
+  danger: '#ef4444',
 };
 
 const tintColorLight = BrandColors.primary;

@@ -63,3 +63,42 @@ export function useWalletTransactions() {
         staleTime: 30000, // 30 seconds
     });
 }
+
+/**
+ * Hook to transfer funds to another user
+ */
+export function useTransferFunds() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (data: { toUserId: number; amount: number; description?: string }) =>
+            rechargeService.transferFunds(data),
+        onSuccess: () => {
+            // Invalidate wallet balance and transactions
+            queryClient.invalidateQueries({ queryKey: ['wallet', 'balance'] });
+            queryClient.invalidateQueries({ queryKey: ['wallet', 'transactions'] });
+        },
+        onError: (error: any) => {
+            console.error('Error transferring funds:', error);
+        },
+    });
+}
+/**
+ * Hook to perform a fictitious recharge (Beta)
+ */
+export function useFictitiousRecharge() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (data: { amount: number }) => rechargeService.fictitiousRecharge(data),
+        onSuccess: () => {
+            // Invalidate wallet balance and transactions
+            queryClient.invalidateQueries({ queryKey: ['wallet', 'balance'] });
+            queryClient.invalidateQueries({ queryKey: ['wallet', 'transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['recharge', 'history'] });
+        },
+        onError: (error: any) => {
+            console.error('Error in fictitious recharge:', error);
+        },
+    });
+}

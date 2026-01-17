@@ -1,7 +1,7 @@
 import { QRScanner } from '@/components/QRScanner';
 import { BrandColors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
     Alert,
@@ -13,11 +13,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// QR code validation pattern for conductor codes
-const QR_VALIDATION_PATTERN = /^CONDUCTOR-\d{6,10}$/;
+// No validation pattern here, let the backend handle it
 
 export default function ScanQRScreen() {
     const router = useRouter();
+    const { amount, transportType } = useLocalSearchParams<{ amount: string; transportType: string }>();
     const [isScanning, setIsScanning] = useState(true);
 
     const handleQRScanned = (data: string) => {
@@ -26,10 +26,14 @@ export default function ScanQRScreen() {
 
         console.log('QR Scanned:', data);
 
-        // Navigate to payment confirmation with QR data
+        // Navigate to payment confirmation with QR data, amount and type
         router.push({
-            pathname: '/(passenger)/payment-confirmation' as any,
-            params: { qrData: data },
+            pathname: '/passenger/payment-confirmation' as any,
+            params: {
+                qrData: data,
+                amount,
+                transportType
+            },
         });
     };
 
@@ -78,7 +82,6 @@ export default function ScanQRScreen() {
             <QRScanner
                 onScan={handleQRScanned}
                 onError={handleError}
-                validationPattern={QR_VALIDATION_PATTERN}
                 active={isScanning}
             />
         </SafeAreaView>

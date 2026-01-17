@@ -4,10 +4,13 @@ import * as SecureStore from 'expo-secure-store';
 /**
  * Save authentication tokens securely
  */
-export async function saveTokens(accessToken: string, refreshToken: string): Promise<void> {
+export async function saveTokens(accessToken: string, refreshToken: string, sessionId?: string): Promise<void> {
     try {
         await SecureStore.setItemAsync(storageKeys.accessToken, accessToken);
         await SecureStore.setItemAsync(storageKeys.refreshToken, refreshToken);
+        if (sessionId) {
+            await SecureStore.setItemAsync(storageKeys.sessionId, sessionId);
+        }
     } catch (error) {
         console.error('Error saving tokens:', error);
         throw new Error('Failed to save authentication tokens');
@@ -39,12 +42,25 @@ export async function getRefreshToken(): Promise<string | null> {
 }
 
 /**
+ * Get session ID from secure storage
+ */
+export async function getSessionId(): Promise<string | null> {
+    try {
+        return await SecureStore.getItemAsync(storageKeys.sessionId);
+    } catch (error) {
+        console.error('Error getting session ID:', error);
+        return null;
+    }
+}
+
+/**
  * Clear all authentication tokens
  */
 export async function clearTokens(): Promise<void> {
     try {
         await SecureStore.deleteItemAsync(storageKeys.accessToken);
         await SecureStore.deleteItemAsync(storageKeys.refreshToken);
+        await SecureStore.deleteItemAsync(storageKeys.sessionId);
     } catch (error) {
         console.error('Error clearing tokens:', error);
         throw new Error('Failed to clear authentication tokens');

@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { queryClient } from '@/lib/queryClient';
@@ -47,7 +48,7 @@ function RootLayoutContent() {
 
   // Redirect to login when user logs out
   useEffect(() => {
-    const inAuthGroup = segments[0] === '(passenger)' || segments[0] === '(conductor)';
+    const inAuthGroup = segments[0] === 'passenger' || segments[0] === 'conductor';
 
     if (!isAuthenticated && inAuthGroup) {
       // User logged out, redirect to login
@@ -56,30 +57,32 @@ function RootLayoutContent() {
   }, [isAuthenticated, segments]);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="splash" options={{ headerShown: false }} />
-        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/login" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/register/index" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="(passenger)"
-          options={{
-            headerShown: false,
-            gestureEnabled: false,
-          }}
-        />
-        <Stack.Screen
-          name="(conductor)"
-          options={{
-            headerShown: false,
-            gestureEnabled: false,
-          }}
-        />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="splash" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/register/index" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="passenger"
+            options={{
+              headerShown: false,
+              gestureEnabled: false,
+            }}
+          />
+          <Stack.Screen
+            name="conductor"
+            options={{
+              headerShown: false,
+              gestureEnabled: false,
+            }}
+          />
+        </Stack>
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 
