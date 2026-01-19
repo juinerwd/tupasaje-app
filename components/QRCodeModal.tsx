@@ -67,7 +67,6 @@ export function QRCodeModal({ visible, onClose, username, userName }: QRCodeModa
             // Save to cache
             await AsyncStorage.setItem(`qr_code_${username}`, JSON.stringify(response));
         } catch (err: any) {
-            console.error('Error generating QR:', err);
             // Only show error if we don't have cached data
             if (!qrData) {
                 setError(err.response?.data?.message || 'Error al generar el código QR. Verifica tu conexión.');
@@ -103,7 +102,6 @@ export function QRCodeModal({ visible, onClose, username, userName }: QRCodeModa
                 dialogTitle: `Compartir código QR de @${username}`,
             });
         } catch (err) {
-            console.error('Error sharing QR:', err);
             Alert.alert('Error', 'No se pudo compartir el código QR');
         } finally {
             setIsSharing(false);
@@ -142,7 +140,6 @@ export function QRCodeModal({ visible, onClose, username, userName }: QRCodeModa
 
             Alert.alert('¡Éxito!', 'Código QR guardado en tu galería');
         } catch (err) {
-            console.error('Error saving QR:', err);
             Alert.alert('Error', 'No se pudo guardar el código QR');
         } finally {
             setIsSaving(false);

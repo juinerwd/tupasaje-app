@@ -49,3 +49,10 @@ export async function fictitiousRecharge(data: { amount: number }): Promise<Rech
     const response = await api.post<RechargeResponse>('/payments/recharge/fictitious', data);
     return response.data;
 }
+/**
+ * Redeem a recharge code
+ */
+export async function redeemCode(code: string): Promise<RechargeResponse> {
+    const response = await api.post<RechargeResponse>('/payments/recharge/redeem', { code });
+    return response.data;
+}

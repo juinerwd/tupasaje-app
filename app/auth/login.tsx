@@ -50,12 +50,12 @@ export default function LoginScreen() {
                         }
                     },
                     onError: (error) => {
-                        console.error('❌ Login onError callback:', error);
+                        loginError(error);
                     },
                 }
             );
         } catch (error) {
-            console.error('❌ Login error caught:', error);
+            loginError(error);
         }
     };
 

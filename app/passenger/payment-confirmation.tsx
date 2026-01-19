@@ -3,6 +3,7 @@ import { useTransferFunds } from '@/hooks/useRecharge';
 import { useWalletBalance } from '@/hooks/useWallet';
 import { scanQRCode } from '@/services/usernameService';
 import { getUserById } from '@/services/userService';
+import { useAuthStore } from '@/store/authStore';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -23,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 interface ConductorInfo {
     id: number;
     name: string;
+    username: string;
     vehicle: string;
     plate: string;
     rating: number;
@@ -30,6 +32,7 @@ interface ConductorInfo {
 
 export default function PaymentConfirmationScreen() {
     const router = useRouter();
+    const { user: currentUser } = useAuthStore();
     const { qrData, userId, amount: amountParam, transportType } = useLocalSearchParams<{
         qrData?: string;
         userId?: string;
@@ -51,12 +54,10 @@ export default function PaymentConfirmationScreen() {
     useEffect(() => {
         const loadConductorInfo = async () => {
             if (!qrData && !userId) {
-                console.log('PaymentConfirmation: Missing qrData and userId');
                 setError('No se proporcionó información del conductor.');
                 setIsLoading(false);
                 return;
             }
-            console.log('PaymentConfirmation: Loading info for', { qrData, userId });
 
             try {
                 setIsLoading(true);
@@ -68,13 +69,13 @@ export default function PaymentConfirmationScreen() {
                 } else if (userId) {
                     response = await getUserById(userId);
                 }
-                console.log('PaymentConfirmation: Response received', response);
 
                 if (response) {
                     // Map API response to ConductorInfo
                     setConductorInfo({
                         id: response.id,
                         name: `${response.firstName} ${response.lastName}`,
+                        username: response.username || 'conductor',
                         vehicle: response.driver?.vehicleType || 'Transporte',
                         plate: response.driver?.vehiclePlate || 'N/A',
                         rating: response.driver?.averageRating || 4.8,
@@ -83,7 +84,6 @@ export default function PaymentConfirmationScreen() {
                     setError('No se pudo encontrar la información del conductor.');
                 }
             } catch (err: any) {
-                console.error('Error loading conductor info:', err);
                 const message = err.response?.data?.message || err.message || 'Error al cargar información';
                 setError(message);
             } finally {
@@ -122,13 +122,17 @@ export default function PaymentConfirmationScreen() {
             {
                 onSuccess: (response) => {
                     router.replace({
-                        pathname: '/passenger/payment-receipt' as any,
+                        pathname: '/shared/payment-receipt' as any,
                         params: {
                             transactionId: response.transactionId,
+                            reference: response.reference,
                             amount: amount.toString(),
-                            conductorName: conductorInfo.name,
-                            vehicle: conductorInfo.vehicle,
-                            plate: conductorInfo.plate,
+                            fee: response.fee.toString(),
+                            netAmount: response.netAmount.toString(),
+                            conductorUsername: conductorInfo.username,
+                            passengerUsername: currentUser?.username || 'usuario',
+                            createdAt: new Date().toISOString(),
+                            status: 'COMPLETED'
                         },
                     });
                 },

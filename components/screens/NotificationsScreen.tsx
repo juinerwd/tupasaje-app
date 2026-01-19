@@ -27,7 +27,33 @@ export default function NotificationsInboxScreen() {
         if (notification.status !== 'READ') {
             markAsReadMutation.mutate(notification.id);
         }
-        // Handle navigation based on notification data if needed
+
+        if (notification.data && (notification.type === NotificationType.PAYMENT || notification.type === NotificationType.RECHARGE)) {
+            if (notification.type === NotificationType.RECHARGE) {
+                router.push({
+                    pathname: '/shared/recharge-receipt',
+                    params: {
+                        transactionId: notification.data.transactionId,
+                        reference: notification.data.reference,
+                        amount: notification.data.amount,
+                        paymentMethod: 'Recarga'
+                    }
+                });
+            } else {
+                router.push({
+                    pathname: '/shared/payment-receipt',
+                    params: {
+                        transactionId: notification.data.transactionId,
+                        reference: notification.data.reference,
+                        amount: notification.data.amount,
+                        conductorUsername: notification.data.toUserUsername || 'conductor',
+                        passengerUsername: notification.data.fromUserUsername || 'usuario',
+                        createdAt: notification.data.date || notification.createdAt,
+                        status: 'COMPLETED'
+                    }
+                });
+            }
+        }
     };
 
     const getIcon = (type: NotificationType) => {
@@ -95,7 +121,43 @@ export default function NotificationsInboxScreen() {
                                     <Text style={[styles.title, !isRead && styles.unreadText]}>{item.title}</Text>
                                     {!isRead && <View style={styles.unreadDot} />}
                                 </View>
-                                <Text style={styles.message} numberOfLines={2}>{item.message}</Text>
+                                <Text style={styles.message} numberOfLines={3}>{item.message}</Text>
+
+                                {item.data && (item.type === NotificationType.PAYMENT || item.type === NotificationType.RECHARGE) && (
+                                    <TouchableOpacity
+                                        style={styles.detailsButton}
+                                        onPress={() => {
+                                            if (item.type === NotificationType.RECHARGE) {
+                                                router.push({
+                                                    pathname: '/shared/recharge-receipt',
+                                                    params: {
+                                                        transactionId: item.data.transactionId,
+                                                        reference: item.data.reference,
+                                                        amount: item.data.amount,
+                                                        paymentMethod: 'Recarga'
+                                                    }
+                                                });
+                                            } else {
+                                                router.push({
+                                                    pathname: '/shared/payment-receipt',
+                                                    params: {
+                                                        transactionId: item.data.transactionId,
+                                                        reference: item.data.reference,
+                                                        amount: item.data.amount,
+                                                        conductorUsername: item.data.toUserUsername || 'conductor',
+                                                        passengerUsername: item.data.fromUserUsername || 'usuario',
+                                                        createdAt: item.data.date || item.createdAt,
+                                                        status: 'COMPLETED'
+                                                    }
+                                                });
+                                            }
+                                        }}
+                                    >
+                                        <Text style={styles.detailsButtonText}>Ver Recibo</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={BrandColors.primary} />
+                                    </TouchableOpacity>
+                                )}
+
                                 <Text style={styles.date}>{date}</Text>
                             </View>
                         </View>
@@ -237,6 +299,22 @@ const styles = StyleSheet.create({
     date: {
         fontSize: 12,
         color: BrandColors.gray[400],
+    },
+    detailsButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: BrandColors.primary + '10',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+        marginBottom: 8,
+        gap: 4,
+    },
+    detailsButtonText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: BrandColors.primary,
     },
     emptyContainer: {
         alignItems: 'center',

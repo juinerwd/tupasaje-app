@@ -102,3 +102,23 @@ export function useFictitiousRecharge() {
         },
     });
 }
+
+/**
+ * Hook to redeem a recharge code
+ */
+export function useRedeemCode() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (code: string) => rechargeService.redeemCode(code),
+        onSuccess: () => {
+            // Invalidate wallet balance and transactions
+            queryClient.invalidateQueries({ queryKey: ['wallet', 'balance'] });
+            queryClient.invalidateQueries({ queryKey: ['wallet', 'transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['recharge', 'history'] });
+        },
+        onError: (error: any) => {
+            console.error('Error redeeming code:', error);
+        },
+    });
+}

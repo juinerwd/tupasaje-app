@@ -1,4 +1,6 @@
 import { BrandColors } from '@/constants/theme';
+import { useAuthStore } from '@/store/authStore';
+import { UserRole } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -20,14 +22,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-export default function PaymentReceiptScreen() {
+export default function RechargeReceiptScreen() {
     const router = useRouter();
-    const { transactionId, amount, conductorName, vehicle, plate } = useLocalSearchParams<{
+    const { user } = useAuthStore();
+    const { transactionId, reference, amount, paymentMethod } = useLocalSearchParams<{
         transactionId: string;
+        reference: string;
         amount: string;
-        conductorName: string;
-        vehicle: string;
-        plate: string;
+        paymentMethod: string;
     }>();
 
     const scale = useSharedValue(0);
@@ -67,11 +69,13 @@ export default function PaymentReceiptScreen() {
     });
 
     const handleGoToDashboard = () => {
-        router.replace('/passenger/dashboard');
+        const path = user?.role === UserRole.DRIVER ? '/conductor/dashboard' : '/passenger/dashboard';
+        router.replace(path as any);
     };
 
     const handleViewHistory = () => {
-        router.replace('/passenger/transactions');
+        const path = user?.role === UserRole.DRIVER ? '/conductor/transactions' : '/passenger/transactions';
+        router.replace(path as any);
     };
 
     return (
@@ -91,9 +95,9 @@ export default function PaymentReceiptScreen() {
                     entering={FadeInDown.delay(300).duration(600).springify()}
                     style={styles.messageContainer}
                 >
-                    <Text style={styles.successTitle}>¡Pago Exitoso!</Text>
+                    <Text style={styles.successTitle}>¡Recarga Exitosa!</Text>
                     <Text style={styles.successSubtitle}>
-                        Tu pago se ha procesado correctamente
+                        Tu saldo se ha actualizado correctamente
                     </Text>
                 </Animated.View>
 
@@ -102,7 +106,7 @@ export default function PaymentReceiptScreen() {
                     entering={FadeInUp.delay(500).duration(600).springify()}
                     style={styles.amountContainer}
                 >
-                    <Text style={styles.amountLabel}>Monto Pagado</Text>
+                    <Text style={styles.amountLabel}>Monto Recargado</Text>
                     <Text style={styles.amountValue}>{formatCurrency(Number(amount))}</Text>
                 </Animated.View>
 
@@ -111,21 +115,16 @@ export default function PaymentReceiptScreen() {
                     entering={FadeInUp.delay(700).duration(600).springify()}
                     style={styles.detailsCard}
                 >
-                    <Text style={styles.detailsTitle}>Detalles de la Transacción</Text>
+                    <Text style={styles.detailsTitle}>Detalles de la Recarga</Text>
 
                     <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Conductor</Text>
-                        <Text style={styles.detailValue}>{conductorName}</Text>
+                        <Text style={styles.detailLabel}>Método de Pago</Text>
+                        <Text style={styles.detailValue}>{paymentMethod || 'Saldo Ficticio'}</Text>
                     </View>
 
                     <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Vehículo</Text>
-                        <Text style={styles.detailValue}>{vehicle}</Text>
-                    </View>
-
-                    <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Placa</Text>
-                        <Text style={styles.detailValue}>{plate}</Text>
+                        <Text style={styles.detailLabel}>Referencia</Text>
+                        <Text style={[styles.detailValue, styles.referenceText]}>{reference}</Text>
                     </View>
 
                     <View style={styles.divider} />
@@ -155,7 +154,7 @@ export default function PaymentReceiptScreen() {
                 >
                     <Ionicons name="information-circle-outline" size={24} color={BrandColors.primary} />
                     <Text style={styles.infoText}>
-                        Puedes ver esta transacción en tu historial en cualquier momento
+                        Guarda el código de referencia para cualquier consulta o reclamo.
                     </Text>
                 </Animated.View>
             </ScrollView>
@@ -223,7 +222,7 @@ const styles = StyleSheet.create({
     },
     amountContainer: {
         width: '100%',
-        backgroundColor: BrandColors.primary,
+        backgroundColor: BrandColors.success,
         borderRadius: 16,
         padding: 24,
         alignItems: 'center',
@@ -269,6 +268,11 @@ const styles = StyleSheet.create({
         textAlign: 'right',
         flex: 1,
         marginLeft: 16,
+    },
+    referenceText: {
+        color: BrandColors.primary,
+        fontWeight: 'bold',
+        fontSize: 16,
     },
     transactionId: {
         fontSize: 12,

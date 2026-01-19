@@ -55,7 +55,6 @@ export function useUpdateNotificationPreferences() {
             if (context?.previousPreferences) {
                 queryClient.setQueryData(['notifications', 'preferences'], context.previousPreferences);
             }
-            console.error('Update notification preferences error:', error);
         },
         onSettled: () => {
             // Always refetch after error or success

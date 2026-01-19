@@ -47,7 +47,6 @@ export default function PassengerProfile() {
         try {
             await updateProfileMutation.mutateAsync({ autoRecharge: value });
         } catch (error) {
-            console.error('Error toggling auto-recharge:', error);
             Alert.alert('Error', 'No se pudo actualizar la configuración de auto-recarga');
         }
     };

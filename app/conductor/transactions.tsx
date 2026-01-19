@@ -53,48 +53,72 @@ export default function ConductorTransactions() {
         }
     };
 
+    const handleTransactionPress = (item: Transaction) => {
+        router.push({
+            pathname: '/shared/payment-receipt',
+            params: {
+                transactionId: item.id,
+                reference: item.reference || 'N/A',
+                amount: item.amount,
+                fee: item.fee,
+                netAmount: item.netAmount,
+                conductorUsername: item.toUser?.username || user?.username || 'conductor',
+                passengerUsername: item.fromUser?.username || 'usuario',
+                createdAt: item.createdAt,
+                status: item.status
+            }
+        });
+    };
+
     const renderTransaction = ({ item, index }: { item: Transaction, index: number }) => {
         const isWithdrawal = item.type === TransactionType.WITHDRAWAL || (item.type === TransactionType.TRANSFER && item.fromUserId === user?.id);
         const amount = parseFloat(item.amount);
+        const isReceived = item.toUserId === user?.id;
 
         return (
             <Animated.View entering={FadeInUp.delay(index * 50).duration(400)}>
-                <Card variant="elevated" style={styles.transactionCard}>
-                    <View style={[
-                        styles.txIconContainer,
-                        isWithdrawal && { backgroundColor: BrandColors.warning + '10' }
-                    ]}>
-                        <Ionicons
-                            name={isWithdrawal ? "arrow-up-circle" : "arrow-down-circle"}
-                            size={24}
-                            color={isWithdrawal ? BrandColors.warning : BrandColors.success}
-                        />
-                    </View>
-                    <View style={styles.txInfo}>
-                        <Text style={styles.txTitle}>
-                            {isWithdrawal ? 'Retiro de fondos' : 'Pago de Pasaje'}
-                        </Text>
-                        <Text style={styles.txDate}>
-                            {new Date(item.createdAt).toLocaleDateString()} • {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                    </View>
-                    <View style={styles.txAmountContainer}>
-                        <Text style={[styles.txAmount, isWithdrawal && { color: BrandColors.warning }]}>
-                            {isWithdrawal ? '-' : '+'}{formatCurrency(Math.abs(amount))}
-                        </Text>
+                <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => handleTransactionPress(item)}
+                >
+                    <Card variant="elevated" style={styles.transactionCard}>
                         <View style={[
-                            styles.statusBadge,
-                            { backgroundColor: getStatusInfo(item.status).bg }
+                            styles.txIconContainer,
+                            !isReceived && { backgroundColor: BrandColors.warning + '10' }
                         ]}>
-                            <Text style={[
-                                styles.statusText,
-                                { color: getStatusInfo(item.status).color }
-                            ]}>
-                                {getStatusInfo(item.status).label}
+                            <Ionicons
+                                name={!isReceived ? "arrow-up-circle" : "arrow-down-circle"}
+                                size={24}
+                                color={!isReceived ? BrandColors.warning : BrandColors.success}
+                            />
+                        </View>
+                        <View style={styles.txInfo}>
+                            <Text style={styles.txTitle}>
+                                {item.type === TransactionType.WITHDRAWAL ? 'Retiro de fondos' :
+                                    !isReceived ? 'Transferencia enviada' : 'Pago de Pasaje'}
+                            </Text>
+                            <Text style={styles.txDate}>
+                                {new Date(item.createdAt).toLocaleDateString()} • {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </Text>
                         </View>
-                    </View>
-                </Card>
+                        <View style={styles.txAmountContainer}>
+                            <Text style={[styles.txAmount, !isReceived && { color: BrandColors.warning }]}>
+                                {!isReceived ? '-' : '+'}{formatCurrency(Math.abs(amount))}
+                            </Text>
+                            <View style={[
+                                styles.statusBadge,
+                                { backgroundColor: getStatusInfo(item.status).bg }
+                            ]}>
+                                <Text style={[
+                                    styles.statusText,
+                                    { color: getStatusInfo(item.status).color }
+                                ]}>
+                                    {getStatusInfo(item.status).label}
+                                </Text>
+                            </View>
+                        </View>
+                    </Card>
+                </TouchableOpacity>
             </Animated.View>
         );
     };

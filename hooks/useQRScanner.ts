@@ -47,7 +47,6 @@ export function useQRScanner() {
 
             setIsScanning(true);
         } catch (err) {
-            console.error('Error starting scanner:', err);
             setError('Error al iniciar el escáner');
         }
     };
@@ -76,7 +75,6 @@ export function useQRScanner() {
                 setError('Código QR inválido');
             }
         } catch (err) {
-            console.error('Error processing scanned data:', err);
             setError('Error al procesar el código QR');
         }
     };

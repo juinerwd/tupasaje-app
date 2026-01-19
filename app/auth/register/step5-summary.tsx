@@ -37,7 +37,6 @@ export default function Step5Summary() {
     const handleConfirmRegistration = async () => {
         // Prevent double submission
         if (isSubmittingRef.current) {
-            console.log('⚠️ Registration already in progress, ignoring duplicate call');
             return;
         }
 

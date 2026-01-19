@@ -27,7 +27,6 @@ export default function EmergencyCodeScreen() {
             const code = await passengerService.generateEmergencyCode();
             setEmergencyCode(code);
         } catch (error) {
-            console.error('Error generating emergency code:', error);
             Alert.alert('Error', 'No se pudo generar el código de emergencia. Inténtalo de nuevo.');
         } finally {
             setLoading(false);

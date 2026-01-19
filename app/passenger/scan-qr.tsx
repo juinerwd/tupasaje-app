@@ -24,8 +24,6 @@ export default function ScanQRScreen() {
         // Vibrate on successful scan
         Vibration.vibrate(100);
 
-        console.log('QR Scanned:', data);
-
         // Navigate to payment confirmation with QR data, amount and type
         router.push({
             pathname: '/passenger/payment-confirmation' as any,

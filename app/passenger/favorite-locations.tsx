@@ -60,7 +60,6 @@ export default function FavoriteLocationsScreen() {
                             await passengerService.deleteFavoriteLocation(id);
                             setLocations(prev => prev.filter(loc => loc.id !== id));
                         } catch (error) {
-                            console.error('Error deleting location:', error);
                             Alert.alert('Error', 'No se pudo eliminar la ubicación.');
                         }
                     },

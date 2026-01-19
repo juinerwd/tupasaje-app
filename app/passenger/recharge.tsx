@@ -1,18 +1,17 @@
 import { Button, Card, ErrorMessage } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
-import { useFictitiousRecharge } from '@/hooks/useRecharge';
+import { useFictitiousRecharge, useRedeemCode } from '@/hooks/useRecharge';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    Alert,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,13 +21,16 @@ export default function RechargeScreen() {
     const router = useRouter();
     const [amount, setAmount] = useState('');
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+    const [rechargeCode, setRechargeCode] = useState('');
     const { mutate: recharge, isPending: isLoading } = useFictitiousRecharge();
+    const { mutate: redeem, isPending: isRedeeming } = useRedeemCode();
     const [error, setError] = useState('');
 
     const paymentMethods = [
         { id: 'pse', name: 'PSE', icon: 'card-outline' as keyof typeof Ionicons.glyphMap },
         { id: 'card', name: 'Tarjeta', icon: 'card-outline' as keyof typeof Ionicons.glyphMap },
         { id: 'cash', name: 'Efectivo', icon: 'cash-outline' as keyof typeof Ionicons.glyphMap },
+        { id: 'code', name: 'Código de Recarga', icon: 'key-outline' as keyof typeof Ionicons.glyphMap },
         { id: 'fictitious', name: 'Saldo Ficticio (Beta)', icon: 'flask-outline' as keyof typeof Ionicons.glyphMap },
     ];
 
@@ -38,6 +40,31 @@ export default function RechargeScreen() {
     };
 
     const handleRecharge = async () => {
+        if (selectedPaymentMethod === 'code') {
+            if (!rechargeCode) {
+                setError('Ingresa un código de recarga');
+                return;
+            }
+
+            redeem(rechargeCode, {
+                onSuccess: (data: any) => {
+                    router.replace({
+                        pathname: '/shared/recharge-receipt',
+                        params: {
+                            transactionId: data.transactionId,
+                            reference: `RC-${rechargeCode}`,
+                            amount: data.amount.toString(),
+                            paymentMethod: 'Código de Recarga'
+                        }
+                    });
+                },
+                onError: (err: any) => {
+                    setError(err?.response?.data?.message || 'Error al redimir el código');
+                },
+            });
+            return;
+        }
+
         if (!amount || parseInt(amount) <= 0) {
             setError('Ingresa un monto válido');
             return;
@@ -53,10 +80,16 @@ export default function RechargeScreen() {
         recharge(
             { amount: parseInt(amount) },
             {
-                onSuccess: () => {
-                    Alert.alert('Éxito', 'Recarga realizada correctamente', [
-                        { text: 'OK', onPress: () => router.back() },
-                    ]);
+                onSuccess: (data: any) => {
+                    router.replace({
+                        pathname: '/shared/recharge-receipt',
+                        params: {
+                            transactionId: data.transactionId,
+                            reference: data.reference,
+                            amount: amount,
+                            paymentMethod: paymentMethods.find(m => m.id === selectedPaymentMethod)?.name || ''
+                        }
+                    });
                 },
                 onError: (err: any) => {
                     setError(err?.response?.data?.message || 'Error al realizar la recarga');
@@ -77,56 +110,6 @@ export default function RechargeScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                {/* Amount Input */}
-                <Card variant="elevated" style={styles.amountCard}>
-                    <Text style={styles.label}>Monto a recargar</Text>
-                    <View style={styles.amountInputContainer}>
-                        <Text style={styles.currencySymbol}>$</Text>
-                        <TextInput
-                            style={styles.amountInput}
-                            value={amount}
-                            onChangeText={(text) => {
-                                setAmount(text.replace(/[^0-9]/g, ''));
-                                setError('');
-                            }}
-                            keyboardType="numeric"
-                            placeholder="0"
-                            placeholderTextColor={BrandColors.gray[400]}
-                        />
-                    </View>
-                    {amount && (
-                        <Text style={styles.amountText}>
-                            {formatCurrency(parseInt(amount) || 0)}
-                        </Text>
-                    )}
-                </Card>
-
-                {/* Quick Amounts */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Montos rápidos</Text>
-                    <View style={styles.quickAmounts}>
-                        {QUICK_AMOUNTS.map((value) => (
-                            <TouchableOpacity
-                                key={value}
-                                style={[
-                                    styles.quickAmountButton,
-                                    amount === value.toString() && styles.quickAmountButtonActive,
-                                ]}
-                                onPress={() => handleQuickAmount(value)}
-                            >
-                                <Text
-                                    style={[
-                                        styles.quickAmountText,
-                                        amount === value.toString() && styles.quickAmountTextActive,
-                                    ]}
-                                >
-                                    {formatCurrency(value)}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                </View>
-
                 {/* Payment Methods */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Método de pago</Text>
@@ -168,15 +151,94 @@ export default function RechargeScreen() {
                     ))}
                 </View>
 
+                {selectedPaymentMethod === 'code' ? (
+                    /* Recharge Code Input */
+                    <Card variant="elevated" style={styles.amountCard}>
+                        <Text style={styles.label}>Ingresa tu código de recarga</Text>
+                        <View style={styles.amountInputContainer}>
+                            <TextInput
+                                style={[styles.amountInput, { fontSize: 32, textAlign: 'center' }]}
+                                value={rechargeCode}
+                                onChangeText={(text) => {
+                                    setRechargeCode(text.toUpperCase());
+                                    setError('');
+                                }}
+                                placeholder="TP-XXXXXXXX"
+                                placeholderTextColor={BrandColors.gray[400]}
+                                autoCapitalize="characters"
+                            />
+                        </View>
+                        <Text style={styles.infoText}>
+                            Los códigos de recarga son proporcionados por puntos autorizados.
+                        </Text>
+                    </Card>
+                ) : (
+                    <>
+                        {/* Amount Input */}
+                        <Card variant="elevated" style={styles.amountCard}>
+                            <Text style={styles.label}>Monto a recargar</Text>
+                            <View style={styles.amountInputContainer}>
+                                <Text style={styles.currencySymbol}>$</Text>
+                                <TextInput
+                                    style={styles.amountInput}
+                                    value={amount}
+                                    onChangeText={(text) => {
+                                        setAmount(text.replace(/[^0-9]/g, ''));
+                                        setError('');
+                                    }}
+                                    keyboardType="numeric"
+                                    placeholder="0"
+                                    placeholderTextColor={BrandColors.gray[400]}
+                                />
+                            </View>
+                            {amount && (
+                                <Text style={styles.amountText}>
+                                    {formatCurrency(parseInt(amount) || 0)}
+                                </Text>
+                            )}
+                        </Card>
+
+                        {/* Quick Amounts */}
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>Montos rápidos</Text>
+                            <View style={styles.quickAmounts}>
+                                {QUICK_AMOUNTS.map((value) => (
+                                    <TouchableOpacity
+                                        key={value}
+                                        style={[
+                                            styles.quickAmountButton,
+                                            amount === value.toString() && styles.quickAmountButtonActive,
+                                        ]}
+                                        onPress={() => handleQuickAmount(value)}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.quickAmountText,
+                                                amount === value.toString() && styles.quickAmountTextActive,
+                                            ]}
+                                        >
+                                            {formatCurrency(value)}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+                    </>
+                )}
+
                 {/* Error Message */}
                 {error && <ErrorMessage message={error} />}
 
                 {/* Summary */}
-                {amount && selectedPaymentMethod && (
+                {((amount && selectedPaymentMethod !== 'code') || (rechargeCode && selectedPaymentMethod === 'code')) && selectedPaymentMethod && (
                     <Card variant="outlined" style={styles.summaryCard}>
                         <View style={styles.summaryRow}>
-                            <Text style={styles.summaryLabel}>Monto a recargar</Text>
-                            <Text style={styles.summaryValue}>{formatCurrency(parseInt(amount))}</Text>
+                            <Text style={styles.summaryLabel}>
+                                {selectedPaymentMethod === 'code' ? 'Código' : 'Monto a recargar'}
+                            </Text>
+                            <Text style={styles.summaryValue}>
+                                {selectedPaymentMethod === 'code' ? rechargeCode : formatCurrency(parseInt(amount))}
+                            </Text>
                         </View>
                         <View style={styles.summaryRow}>
                             <Text style={styles.summaryLabel}>Método de pago</Text>
@@ -191,10 +253,10 @@ export default function RechargeScreen() {
             {/* Recharge Button */}
             <View style={styles.footer}>
                 <Button
-                    title="Recargar"
+                    title={selectedPaymentMethod === 'code' ? 'Redimir Código' : 'Recargar'}
                     onPress={handleRecharge}
-                    loading={isLoading}
-                    disabled={!amount || !selectedPaymentMethod || isLoading}
+                    loading={isLoading || isRedeeming}
+                    disabled={(!amount && selectedPaymentMethod !== 'code') || (!rechargeCode && selectedPaymentMethod === 'code') || !selectedPaymentMethod || isLoading || isRedeeming}
                     fullWidth
                     size="large"
                 />
@@ -359,5 +421,12 @@ const styles = StyleSheet.create({
         backgroundColor: BrandColors.white,
         borderTopWidth: 1,
         borderTopColor: BrandColors.gray[200],
+    },
+    infoText: {
+        fontSize: 12,
+        color: BrandColors.gray[500],
+        textAlign: 'center',
+        marginTop: 12,
+        paddingHorizontal: 20,
     },
 });

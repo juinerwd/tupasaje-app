@@ -87,7 +87,6 @@ export default function OnboardingScreen() {
             await setFirstTimeLaunch(false);
             router.replace('/auth/login');
         } catch (error) {
-            console.error('Error setting first time launch:', error);
             router.replace('/auth/login');
         }
     };

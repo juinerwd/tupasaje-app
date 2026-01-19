@@ -49,6 +49,7 @@ export interface UpdateProfileDto {
     bio?: string;
     dateOfBirth?: string;
     gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+    username?: string;
 }
 
 // Authentication tokens
@@ -162,6 +163,10 @@ export interface DriverProfile {
         email: string;
         phoneNumber: string;
         avatar?: string;
+        bio?: string | null;
+        dateOfBirth?: string | null;
+        gender?: string | null;
+        username?: string;
     };
     isAvailable: boolean;
     lastAvailableAt?: string;
@@ -182,6 +187,12 @@ export interface DriverProfile {
 
 // Update Driver Profile DTO
 export interface UpdateDriverProfileDto {
+    firstName?: string;
+    lastName?: string;
+    bio?: string;
+    dateOfBirth?: string;
+    gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+    username?: string;
     vehiclePlate?: string;
     vehicleModel?: string;
     vehicleYear?: number;
@@ -255,18 +266,21 @@ export interface Transaction {
     fee: string;
     netAmount: string;
     currency: string;
+    reference?: string;
     fromUserId?: number;
     toUserId?: number;
     fromUser?: {
         id: number;
         firstName: string;
         lastName: string;
+        username?: string;
         email: string;
     };
     toUser?: {
         id: number;
         firstName: string;
         lastName: string;
+        username?: string;
         email: string;
     };
     description?: string;
@@ -304,13 +318,6 @@ export interface RechargeDto {
     redirectUrl?: string;
 }
 
-// Recharge Response
-export interface RechargeResponse {
-    transaction: Transaction;
-    paymentLink: string;
-    reference: string;
-}
-
 // Transfer DTO
 export interface TransferDto {
     toUserId: number;
@@ -321,10 +328,11 @@ export interface TransferDto {
 // Transfer Response
 export interface TransferResponse {
     transactionId: string;
+    reference: string;
     amount: number;
     fee: number;
     netAmount: number;
-    status: string;
+    status: TransactionStatus;
     fromUser: {
         id: number;
         name: string;

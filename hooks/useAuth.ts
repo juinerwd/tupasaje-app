@@ -60,8 +60,6 @@ export function useLogout() {
             queryClient.clear();
         },
         onError: async (error: any, variables) => {
-            console.error('Logout error:', error);
-
             // Force logout even on error
             await logoutStore(variables?.reason);
             queryClient.clear();
@@ -97,8 +95,6 @@ export function useProfile() {
     // Handle errors
     React.useEffect(() => {
         if (query.error) {
-            console.error('Profile fetch error:', query.error);
-
             // If unauthorized, clear tokens
             const error = query.error as any;
             if (error.response?.status === 401) {

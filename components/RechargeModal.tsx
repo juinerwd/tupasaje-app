@@ -111,7 +111,6 @@ export function RechargeModal({ visible, onClose, onSuccess }: RechargeModalProp
                 );
             }
         } catch (error: any) {
-            console.error('Recharge error:', error);
             Alert.alert(
                 'Error',
                 error.response?.data?.message || 'Error al iniciar la recarga'

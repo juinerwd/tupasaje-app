@@ -5,6 +5,7 @@ import { Transaction, TransactionType } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -12,6 +13,7 @@ import {
     RefreshControl,
     StyleSheet,
     Text,
+    TouchableOpacity,
     View
 } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
@@ -20,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const AnimatedCard = Animated.createAnimatedComponent(Card);
 
 export default function PassengerTransactions() {
+    const router = useRouter();
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -45,6 +48,33 @@ export default function PassengerTransactions() {
         await fetchTransactions();
         setRefreshing(false);
     }, [fetchTransactions]);
+
+    const handleTransactionPress = (item: Transaction) => {
+        if (item.type === TransactionType.RECHARGE) {
+            router.push({
+                pathname: '/shared/recharge-receipt',
+                params: {
+                    transactionId: item.id,
+                    reference: item.reference || 'N/A',
+                    amount: item.amount,
+                    paymentMethod: 'Recarga'
+                }
+            });
+        } else {
+            router.push({
+                pathname: '/shared/payment-receipt',
+                params: {
+                    transactionId: item.id,
+                    reference: item.reference || 'N/A',
+                    amount: item.amount,
+                    conductorUsername: item.toUser?.username || 'conductor',
+                    passengerUsername: item.fromUser?.username || 'usuario',
+                    createdAt: item.createdAt,
+                    status: item.status
+                }
+            });
+        }
+    };
 
     const renderTransaction = ({ item, index }: { item: Transaction; index: number }) => {
         const isIncoming =
@@ -91,54 +121,59 @@ export default function PassengerTransactions() {
         };
 
         return (
-            <AnimatedCard
-                entering={FadeInRight.delay(index * 50).duration(400).springify()}
-                variant="outlined"
-                style={styles.transactionCard}
+            <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => handleTransactionPress(item)}
             >
-                <View style={styles.transactionContent}>
-                    <View style={styles.transactionLeft}>
-                        <LinearGradient
-                            colors={isIncoming ? ['#d1fae5', '#a7f3d0'] : ['#fee2e2', '#fecaca']}
-                            style={styles.transactionIcon}
-                        >
-                            <Ionicons
-                                name={isIncoming ? 'arrow-down' : 'arrow-up'}
-                                size={20}
-                                color={isIncoming ? BrandColors.success : BrandColors.error}
-                            />
-                        </LinearGradient>
-                        <View style={styles.transactionInfo}>
-                            <Text style={styles.transactionType}>{item.type}</Text>
-                            <Text style={styles.transactionDescription}>
-                                {item.description || 'Sin descripción'}
+                <AnimatedCard
+                    entering={FadeInRight.delay(index * 50).duration(400).springify()}
+                    variant="outlined"
+                    style={styles.transactionCard}
+                >
+                    <View style={styles.transactionContent}>
+                        <View style={styles.transactionLeft}>
+                            <LinearGradient
+                                colors={isIncoming ? ['#d1fae5', '#a7f3d0'] : ['#fee2e2', '#fecaca']}
+                                style={styles.transactionIcon}
+                            >
+                                <Ionicons
+                                    name={isIncoming ? 'arrow-down' : 'arrow-up'}
+                                    size={20}
+                                    color={isIncoming ? BrandColors.success : BrandColors.error}
+                                />
+                            </LinearGradient>
+                            <View style={styles.transactionInfo}>
+                                <Text style={styles.transactionType}>{item.type}</Text>
+                                <Text style={styles.transactionDescription}>
+                                    {item.description || 'Sin descripción'}
+                                </Text>
+                                <View style={styles.transactionMeta}>
+                                    <Text style={styles.transactionDate}>{formattedDate}</Text>
+                                    <Text style={styles.transactionTime}> • {formattedTime}</Text>
+                                </View>
+                            </View>
+                        </View>
+                        <View style={styles.transactionRight}>
+                            <Text
+                                style={[
+                                    styles.transactionAmount,
+                                    isIncoming
+                                        ? styles.transactionAmountPositive
+                                        : styles.transactionAmountNegative,
+                                ]}
+                            >
+                                {isIncoming ? '+' : '-'}
+                                {formatCurrency(Math.abs(amount))}
                             </Text>
-                            <View style={styles.transactionMeta}>
-                                <Text style={styles.transactionDate}>{formattedDate}</Text>
-                                <Text style={styles.transactionTime}> • {formattedTime}</Text>
+                            <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor()}20` }]}>
+                                <Text style={[styles.statusText, { color: getStatusColor() }]}>
+                                    {getStatusText()}
+                                </Text>
                             </View>
                         </View>
                     </View>
-                    <View style={styles.transactionRight}>
-                        <Text
-                            style={[
-                                styles.transactionAmount,
-                                isIncoming
-                                    ? styles.transactionAmountPositive
-                                    : styles.transactionAmountNegative,
-                            ]}
-                        >
-                            {isIncoming ? '+' : '-'}
-                            {formatCurrency(Math.abs(amount))}
-                        </Text>
-                        <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor()}20` }]}>
-                            <Text style={[styles.statusText, { color: getStatusColor() }]}>
-                                {getStatusText()}
-                            </Text>
-                        </View>
-                    </View>
-                </View>
-            </AnimatedCard>
+                </AnimatedCard>
+            </TouchableOpacity>
         );
     };
 

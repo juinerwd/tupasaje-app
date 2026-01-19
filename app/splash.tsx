@@ -69,7 +69,6 @@ export default function SplashScreen() {
                     router.replace('/auth/login');
                 }
             } catch (error) {
-                console.error('Error navigating from splash:', error);
                 router.replace('/auth/login');
             }
         }, 2500);

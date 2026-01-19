@@ -97,7 +97,6 @@ export default function ConductorDashboard() {
                     style: 'destructive',
                     onPress: () => {
                         Linking.openURL('tel:123').catch(err => {
-                            console.error('Error opening dialer:', err);
                             Alert.alert('Error', 'No se pudo abrir el marcador telefónico.');
                         });
                     }

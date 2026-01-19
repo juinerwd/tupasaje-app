@@ -72,7 +72,6 @@ export default function Index() {
                     router.replace('/auth/login');
                 }
             } catch (error) {
-                console.error('Error navigating to initial route:', error);
                 // On error, default to splash
                 router.replace('/splash');
             }

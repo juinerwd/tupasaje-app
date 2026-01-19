@@ -66,9 +66,9 @@ export const useInactivityLogout = (config: AutoLogoutConfig = {}) => {
         const now = Date.now();
         const timeSinceLastActivity = now - lastActivityRef.current;
 
-        // Solo reiniciar si ha pasado más de 1 segundo desde la última actividad
-        // (para evitar reiniciar constantemente)
-        if (timeSinceLastActivity > 1000) {
+        // Solo reiniciar si ha pasado más de 500ms desde la última actividad
+        // (para evitar reiniciar constantemente pero ser más sensible que 1s)
+        if (timeSinceLastActivity > 500) {
             resetTimers();
         }
     };

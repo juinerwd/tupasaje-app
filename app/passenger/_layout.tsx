@@ -1,18 +1,14 @@
-import { AutoLogoutMessage } from '@/components/AutoLogoutMessage';
-import { configToMilliseconds, getAutoLogoutConfig } from '@/config/autoLogoutConfig';
 import { BrandColors } from '@/constants/theme';
-import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PassengerLayout() {
-    const { user, logout } = useAuthStore();
-    const [showAutoLogoutMessage, setShowAutoLogoutMessage] = useState(false);
+    const { user } = useAuthStore();
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
@@ -20,22 +16,6 @@ export default function PassengerLayout() {
     if (user && user.role === UserRole.DRIVER) {
         return <Redirect href="/conductor/dashboard" />;
     }
-
-    // AUTO LOGOUT SETTINGS
-    const autoLogoutConfig = getAutoLogoutConfig();
-    const { timeout, enabled } = configToMilliseconds(autoLogoutConfig);
-
-    useInactivityLogout({
-        timeout,
-        enabled,
-        onAutoLogout: () => setShowAutoLogoutMessage(true),
-    });
-
-    const handleLogoutConfirm = async () => {
-        setShowAutoLogoutMessage(false);
-        await logout();
-        router.replace('/auth/login');
-    };
 
     return (
         <View style={{ flex: 1 }}>
@@ -124,12 +104,6 @@ export default function PassengerLayout() {
                     }}
                 />
                 <Tabs.Screen
-                    name="payment-receipt"
-                    options={{
-                        href: null, // Ocultar de los tabs
-                    }}
-                />
-                <Tabs.Screen
                     name="qr-payment"
                     options={{
                         href: null, // Ocultar de los tabs
@@ -196,10 +170,6 @@ export default function PassengerLayout() {
                     }}
                 />
             </Tabs>
-            <AutoLogoutMessage
-                visible={showAutoLogoutMessage}
-                onClose={handleLogoutConfirm}
-            />
         </View>
     );
 }

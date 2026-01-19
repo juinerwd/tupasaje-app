@@ -5,7 +5,6 @@ import { useUpdatePassengerProfile } from '@/hooks/usePassenger';
 import { useUpdateProfile, useUserProfile } from '@/hooks/useProfile';
 import { checkUsernameAvailability, CheckUsernameResponse, updateUsername } from '@/services/usernameService';
 import { useAuthStore } from '@/store/authStore';
-import { UpdateProfileDto } from '@/types';
 import { formatDateOfBirth, formatDateOfBirthLong } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -176,90 +175,46 @@ export default function EditProfile() {
             }
         }
 
-        // Prepare general profile update
-        const updateData: UpdateProfileDto = {};
+        // Prepare update data
+        const updateData: any = {};
         if (firstName !== user?.firstName) updateData.firstName = firstName.trim();
         if (lastName !== user?.lastName) updateData.lastName = lastName.trim();
-        if (bio !== user?.bio) updateData.bio = bio.trim() || undefined;
+        if (bio !== user?.bio) updateData.bio = bio.trim() || '';
         if (dateOfBirth !== user?.dateOfBirth) updateData.dateOfBirth = dateOfBirth || undefined;
         if (gender !== user?.gender) updateData.gender = gender || undefined;
 
-        // Prepare role-specific update
-        let roleUpdateData: any = null;
+        // Add driver specific data if applicable
         if (user?.role === 'DRIVER') {
             const driver = (user as any).driver || {};
-            const newDriverData: any = {};
-            if (vehiclePlate !== driver.vehiclePlate) newDriverData.vehiclePlate = vehiclePlate.trim();
-            if (vehicleModel !== driver.vehicleModel) newDriverData.vehicleModel = vehicleModel.trim();
-            if (vehicleYear !== driver.vehicleYear?.toString()) newDriverData.vehicleYear = parseInt(vehicleYear) || undefined;
-            if (vehicleColor !== driver.vehicleColor) newDriverData.vehicleColor = vehicleColor.trim();
-            if (vehicleType !== driver.vehicleType) newDriverData.vehicleType = vehicleType.trim();
-
-            if (Object.keys(newDriverData).length > 0) {
-                roleUpdateData = newDriverData;
-            }
+            if (vehiclePlate !== driver.vehiclePlate) updateData.vehiclePlate = vehiclePlate.trim();
+            if (vehicleModel !== driver.vehicleModel) updateData.vehicleModel = vehicleModel.trim();
+            if (vehicleYear !== driver.vehicleYear?.toString()) updateData.vehicleYear = parseInt(vehicleYear) || undefined;
+            if (vehicleColor !== driver.vehicleColor) updateData.vehicleColor = vehicleColor.trim();
+            if (vehicleType !== driver.vehicleType) updateData.vehicleType = vehicleType.trim();
         }
 
-        const hasProfileChanges = Object.keys(updateData).length > 0;
-        const hasRoleChanges = !!roleUpdateData;
+        const hasChanges = Object.keys(updateData).length > 0;
         const hasUsernameChange = !user?.username && username.trim();
 
-        if (!hasProfileChanges && !hasUsernameChange && !hasRoleChanges) {
+        if (!hasChanges && !hasUsernameChange) {
             Alert.alert('Sin cambios', 'No has realizado ningún cambio');
             return;
         }
 
-        try {
-            if (hasUsernameChange) {
-                Alert.alert(
-                    '⚠️ Username Permanente',
-                    'El username NO se puede cambiar una vez establecido. ¿Estás seguro de usar "' + username.trim() + '"?',
-                    [
-                        { text: 'Cancelar', style: 'cancel' },
-                        {
-                            text: 'Confirmar',
-                            style: 'default',
-                            onPress: async () => {
-                                try {
-                                    await updateUsername(username.trim());
-                                    if (hasProfileChanges) {
-                                        await updateProfileMutation.mutateAsync(updateData);
-                                    }
-                                    if (hasRoleChanges) {
-                                        if (user?.role === 'DRIVER') {
-                                            await updateDriverProfileMutation.mutateAsync(roleUpdateData);
-                                        }
-                                    }
-                                    Alert.alert(
-                                        'Éxito',
-                                        'Tu perfil ha sido actualizado correctamente',
-                                        [{
-                                            text: 'OK', onPress: () => {
-                                                const profilePath = user?.role === 'DRIVER' ? '/conductor/profile' : '/passenger/profile';
-                                                router.replace(profilePath as any);
-                                            }
-                                        }]
-                                    );
-                                } catch (error: any) {
-                                    const errorMessage = error.response?.data?.message || 'Error al actualizar el perfil';
-                                    Alert.alert('Error', errorMessage);
-                                }
-                            },
-                        },
-                    ]
-                );
-                return;
-            }
-
-            if (hasProfileChanges || hasRoleChanges) {
-                if (hasProfileChanges) {
-                    await updateProfileMutation.mutateAsync(updateData);
+        const performUpdate = async () => {
+            try {
+                if (hasUsernameChange) {
+                    await updateUsername(username.trim());
                 }
-                if (hasRoleChanges) {
+
+                if (hasChanges) {
                     if (user?.role === 'DRIVER') {
-                        await updateDriverProfileMutation.mutateAsync(roleUpdateData);
+                        await updateDriverProfileMutation.mutateAsync(updateData);
+                    } else {
+                        await updateProfileMutation.mutateAsync(updateData);
                     }
                 }
+
                 Alert.alert(
                     'Éxito',
                     'Tu perfil ha sido actualizado correctamente',
@@ -270,10 +225,23 @@ export default function EditProfile() {
                         }
                     }]
                 );
+            } catch (error: any) {
+                const errorMessage = error.response?.data?.message || 'Error al actualizar el perfil';
+                Alert.alert('Error', errorMessage);
             }
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.message || 'Error al actualizar el perfil';
-            Alert.alert('Error', errorMessage);
+        };
+
+        if (hasUsernameChange) {
+            Alert.alert(
+                '⚠️ Username Permanente',
+                'El username NO se puede cambiar una vez establecido. ¿Estás seguro de usar "' + username.trim() + '"?',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Confirmar', style: 'default', onPress: performUpdate },
+                ]
+            );
+        } else {
+            performUpdate();
         }
     };
 

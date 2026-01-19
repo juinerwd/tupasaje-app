@@ -82,7 +82,6 @@ export function useUpdateProfile() {
                 queryClient.setQueryData(['user', 'profile'], context.previousUser);
                 setUser(context.previousUser);
             }
-            console.error('Update profile error:', error);
         },
         onSettled: () => {
             // Always refetch after error or success
