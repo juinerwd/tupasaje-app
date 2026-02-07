@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "tupasaje-app",
-    "slug": "tupasaje-app",
+    "slug": "tu-pasaje-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -24,7 +24,9 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "CAMERA"
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -56,6 +58,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4ad1614f-7c37-43de-acfb-9a842008ab59"
+      }
+    },
+    "owner": "tu-pasaje"
   }
 }

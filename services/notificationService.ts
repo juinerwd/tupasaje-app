@@ -65,3 +65,24 @@ export async function updatePreferences(
     const response = await api.patch<NotificationPreferences>('/notifications/preferences', data);
     return response.data;
 }
+
+/**
+ * Register a device token for push notifications
+ */
+export async function registerDeviceToken(data: {
+    token: string;
+    deviceName?: string;
+    platform?: string;
+}): Promise<any> {
+    const response = await api.post('/notifications/devices/register', data);
+    return response.data;
+}
+
+/**
+ * Unregister a device token
+ */
+export async function unregisterDeviceToken(token: string): Promise<any> {
+    const response = await api.delete(`/notifications/devices/${token}`);
+    return response.data;
+}
+

@@ -17,7 +17,7 @@ export function useInitiateRecharge() {
             queryClient.invalidateQueries({ queryKey: ['recharge', 'history'] });
         },
         onError: (error: any) => {
-            console.error('Error initiating recharge:', error);
+            // Silently handled - component will handle the error
         },
     });
 }
@@ -79,7 +79,7 @@ export function useTransferFunds() {
             queryClient.invalidateQueries({ queryKey: ['wallet', 'transactions'] });
         },
         onError: (error: any) => {
-            console.error('Error transferring funds:', error);
+            // Silently handled - component will handle error message display
         },
     });
 }
@@ -98,7 +98,7 @@ export function useFictitiousRecharge() {
             queryClient.invalidateQueries({ queryKey: ['recharge', 'history'] });
         },
         onError: (error: any) => {
-            console.error('Error in fictitious recharge:', error);
+            // Silently handled
         },
     });
 }
@@ -118,7 +118,7 @@ export function useRedeemCode() {
             queryClient.invalidateQueries({ queryKey: ['recharge', 'history'] });
         },
         onError: (error: any) => {
-            console.error('Error redeeming code:', error);
+            // Silently handled
         },
     });
 }

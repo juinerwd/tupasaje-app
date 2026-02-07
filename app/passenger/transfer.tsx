@@ -56,6 +56,19 @@ export default function TransferScreen() {
     };
 
     const handleSearchUser = async () => {
+        // Validar perfil completo
+        if (currentUser && !currentUser.profileCompleted) {
+            Alert.alert(
+                'Perfil Incompleto',
+                'Debes completar tu información personal para realizar transferencias.',
+                [
+                    { text: 'Ahora no', style: 'cancel' },
+                    { text: 'Completar Perfil', onPress: () => router.push('/passenger/edit-profile') }
+                ]
+            );
+            return;
+        }
+
         if (phone.length < 10) {
             setError('Ingresa un número de teléfono válido');
             return;
@@ -86,6 +99,20 @@ export default function TransferScreen() {
 
     const handleQRScan = async (data: string) => {
         setIsScannerVisible(false);
+
+        // Validar perfil completo
+        if (currentUser && !currentUser.profileCompleted) {
+            Alert.alert(
+                'Perfil Incompleto',
+                'Debes completar tu información personal para realizar transferencias.',
+                [
+                    { text: 'Ahora no', style: 'cancel' },
+                    { text: 'Completar Perfil', onPress: () => router.push('/passenger/edit-profile') }
+                ]
+            );
+            return;
+        }
+
         setIsSearching(true);
         setError(null);
         setRecipient(null);

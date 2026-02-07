@@ -24,11 +24,18 @@ export function usePassengerProfile() {
  */
 export function useUpdatePassengerProfile() {
     const queryClient = useQueryClient();
+    const { setUser } = useAuthStore();
 
     return useMutation({
         mutationFn: (data: UpdatePassengerProfileDto) => passengerService.updateProfile(data),
-        onSuccess: () => {
+        onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['passenger', 'profile'] });
+            queryClient.invalidateQueries({ queryKey: ['user', 'profile'] });
+
+            // If the response contains the updated user, sync it to the auth store
+            if (data && (data as any).user) {
+                setUser((data as any).user);
+            }
         },
     });
 }

@@ -149,11 +149,29 @@ export default function PassengerDashboard() {
     }, [fetchDashboardData]);
 
     const handleActionPress = (action: string) => {
-        // Add haptic feedback if available
+        // Validar perfil completo para acciones financieras
+        // Usamos tanto el estado del usuario como el data de completitud para mayor seguridad
+        const isProfileComplete = user?.profileCompleted || completenessData?.completed;
+
+        if (['recharge', 'pay', 'pay-transport', 'transfer'].includes(action) && user && !isProfileComplete) {
+            Alert.alert(
+                'Perfil Incompleto',
+                'Para realizar recargas o pagos, primero debes completar tu información de perfil.',
+                [
+                    { text: 'Ahora no', style: 'cancel' },
+                    {
+                        text: 'Completar Perfil',
+                        onPress: () => router.push('/passenger/edit-profile')
+                    }
+                ]
+            );
+            return;
+        }
+
         if (action === 'recharge') {
             setRechargeModalVisible(true);
         } else if (action === 'pay') {
-            router.push('/passenger/qr-payment');
+            router.push('/passenger/pay-transport');
         } else if (action === 'pay-transport') {
             router.push('/passenger/pay-transport');
         } else if (action === 'transfer') {
@@ -168,6 +186,19 @@ export default function PassengerDashboard() {
     };
 
     const handlePromotionPress = (promotion: any) => {
+        // Validar perfil completo para promociones que implican recarga o acciones financieras
+        if (promotion.actionType === 'RECHARGE' && user && !user.profileCompleted) {
+            Alert.alert(
+                'Perfil Incompleto',
+                'Debes completar tu perfil para acceder a esta promoción.',
+                [
+                    { text: 'Cerrar', style: 'cancel' },
+                    { text: 'Completar', onPress: () => router.push('/passenger/edit-profile') }
+                ]
+            );
+            return;
+        }
+
         if (promotion.actionType === 'RECHARGE') {
             setRechargeModalVisible(true);
         } else if (promotion.actionType === 'REFERRAL') {
@@ -360,7 +391,7 @@ export default function PassengerDashboard() {
                             ) : (
                                 <Text style={styles.statValue}>{passengerProfile?.totalTrips || 0}</Text>
                             )}
-                            <Text style={styles.statLabel}>Viajes</Text>
+                            <Text style={styles.statLabel}>Pagos</Text>
                         </LinearGradient>
                     </Animated.View>
 

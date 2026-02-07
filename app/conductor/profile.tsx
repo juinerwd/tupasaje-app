@@ -97,7 +97,7 @@ export default function ConductorProfile() {
                             )}
                         </View>
                         <Text style={styles.userName}>{user?.firstName} {user?.lastName}</Text>
-                        <Text style={styles.userRole}>Conductor Certificado</Text>
+                        <Text style={styles.userRole}>{user?.role === 'DRIVER' ? 'Conductor Certificado' : 'Conductor'}</Text>
                         {user?.username && (
                             <Text style={styles.userUsername}>@{user.username}</Text>
                         )}

@@ -11,6 +11,8 @@ import {
     View,
 } from 'react-native';
 
+import { pinSchema } from '@/utils/validation';
+
 export default function Step4PinCreation() {
     const { setPin, nextStep } = useRegistration();
 
@@ -19,11 +21,14 @@ export default function Step4PinCreation() {
     const [error, setError] = useState('');
 
     const handleContinue = () => {
-        // Validate PIN
-        if (pin.length !== 6) {
-            setError('El PIN debe tener 6 dígitos');
+        // Validate PIN using the shared schema
+        const validation = pinSchema.safeParse(pin);
+
+        if (!validation.success) {
+            setError(validation.error.issues[0].message);
             return;
         }
+
 
         if (pin !== confirmPin) {
             setError('Los PINs no coinciden');
@@ -35,6 +40,7 @@ export default function Step4PinCreation() {
         setPin(pin);
         nextStep();
     };
+
 
     const handlePinChange = (value: string) => {
         setPinLocal(value);
@@ -108,9 +114,9 @@ export default function Step4PinCreation() {
                     {pin.length === 6 && (
                         <View style={styles.strengthContainer}>
                             <Text style={styles.strengthText}>
-                                {/^(\d)\1{5}$/.test(pin) || /^(012345|123456|234567|345678|456789|567890)$/.test(pin)
-                                    ? '⚠️ PIN débil - Elige un PIN más seguro'
-                                    : '✓ PIN aceptable'}
+                                {!pinSchema.safeParse(pin).success
+                                    ? '⚠️ PIN muy simple - Evita números repetidos o secuencias'
+                                    : '✓ PIN seguro'}
                             </Text>
                         </View>
                     )}

@@ -146,7 +146,7 @@ export default function WalletScreen() {
 
                     <TouchableOpacity
                         style={styles.actionButton}
-                        onPress={() => router.push('/passenger/qr-payment')}
+                        onPress={() => router.push('/passenger/pay-transport')}
                     >
                         <View style={styles.actionIcon}>
                             <Ionicons name="qr-code" size={24} color={BrandColors.primary} />

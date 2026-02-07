@@ -148,6 +148,13 @@ export interface UpdatePassengerProfileDto {
     autoRechargeThreshold?: number;
     autoRechargeAmount?: number;
     savedAddresses?: any[];
+    firstName?: string;
+    lastName?: string;
+    bio?: string;
+    dateOfBirth?: string;
+    gender?: string;
+    username?: string;
+    avatar?: string;
 }
 
 // Driver Profile

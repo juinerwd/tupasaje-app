@@ -36,8 +36,9 @@ export function useUnreadNotificationsCount() {
             return await notificationService.getUnreadCount();
         },
         enabled: isAuthenticated,
-        refetchInterval: 30000, // Refetch every 30 seconds
+        refetchInterval: 300000, // Refetch every 5 minutes (backup for sockets)
     });
+
 }
 
 /**

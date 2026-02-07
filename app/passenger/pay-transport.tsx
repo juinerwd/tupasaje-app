@@ -3,18 +3,21 @@ import { BrandColors } from '@/constants/theme';
 import { useWalletBalance } from '@/hooks/useWallet';
 import { getUserByUsername } from '@/services/usernameService';
 import { searchUserByPhone } from '@/services/userService';
+import { useAuthStore } from '@/store/authStore';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+    Alert,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,13 +29,21 @@ const TRANSPORT_TYPES = [
     { id: 'taxi', name: 'Taxi', icon: 'car-outline' as keyof typeof Ionicons.glyphMap },
 ];
 
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+
 export default function PayTransportScreen() {
     const router = useRouter();
+    const { user } = useAuthStore();
     const { data: balanceData } = useWalletBalance();
+
+    // UI State
+    const [activeTab, setActiveTab] = useState<'scan' | 'manual'>('scan');
+
+    // Form State (for Manual or after Scan)
     const [selectedTransport, setSelectedTransport] = useState<string | null>(null);
     const [amount, setAmount] = useState('');
     const [error, setError] = useState('');
-    const [manualType, setManualType] = useState<'none' | 'username' | 'phone'>('none');
+    const [manualMethod, setManualMethod] = useState<'username' | 'phone'>('username');
     const [manualValue, setManualValue] = useState('');
     const [isSearching, setIsSearching] = useState(false);
 
@@ -40,36 +51,37 @@ export default function PayTransportScreen() {
         ? parseFloat(balanceData.balance)
         : (balanceData?.balance || 0);
 
-    const selectedTransportData = TRANSPORT_TYPES.find((t) => t.id === selectedTransport);
-
-    const handleScanQR = () => {
-        if (!selectedTransport) {
-            setError('Selecciona un tipo de transporte');
+    const handleOpenScanner = () => {
+        // Validar perfil completo
+        if (user && !user.profileCompleted) {
+            Alert.alert(
+                'Perfil Incompleto',
+                'Debes completar tu información personal para realizar pagos.',
+                [
+                    { text: 'Ahora no', style: 'cancel' },
+                    { text: 'Completar Perfil', onPress: () => router.push('/passenger/edit-profile') }
+                ]
+            );
             return;
         }
 
-        const numericAmount = parseFloat(amount);
-        if (!amount || isNaN(numericAmount) || numericAmount <= 0) {
-            setError('Ingresa un valor válido para el pasaje');
-            return;
-        }
-
-        if (numericAmount > balance) {
-            setError('Saldo insuficiente en tu billetera');
-            return;
-        }
-
-        setError('');
-        router.push({
-            pathname: '/passenger/scan-qr' as any,
-            params: {
-                amount: amount,
-                transportType: selectedTransport
-            }
-        });
+        router.push('/passenger/scan-qr' as any);
     };
 
     const handleManualContinue = async () => {
+        // Validar perfil completo
+        if (user && !user.profileCompleted) {
+            Alert.alert(
+                'Perfil Incompleto',
+                'Debes completar tu información personal para realizar pagos.',
+                [
+                    { text: 'Ahora no', style: 'cancel' },
+                    { text: 'Completar Perfil', onPress: () => router.push('/passenger/edit-profile') }
+                ]
+            );
+            return;
+        }
+
         if (!selectedTransport) {
             setError('Selecciona un tipo de transporte');
             return;
@@ -77,17 +89,17 @@ export default function PayTransportScreen() {
 
         const numericAmount = parseFloat(amount);
         if (!amount || isNaN(numericAmount) || numericAmount <= 0) {
-            setError('Ingresa un valor válido para el pasaje');
+            setError('Ingresa un valor válido');
             return;
         }
 
         if (numericAmount > balance) {
-            setError('Saldo insuficiente en tu billetera');
+            setError('Saldo insuficiente');
             return;
         }
 
         if (!manualValue) {
-            setError(manualType === 'username' ? 'Ingresa el nombre de usuario' : 'Ingresa el número de teléfono');
+            setError(manualMethod === 'username' ? 'Ingresa el usuario' : 'Ingresa el teléfono');
             return;
         }
 
@@ -96,26 +108,23 @@ export default function PayTransportScreen() {
             setError('');
 
             let driver = null;
-            if (manualType === 'username') {
+            if (manualMethod === 'username') {
                 driver = await getUserByUsername(manualValue);
             } else {
                 driver = await searchUserByPhone(manualValue);
             }
 
             if (!driver) {
-                setError(manualType === 'username' ? 'Usuario no encontrado' : 'Teléfono no encontrado');
+                setError('Conductor no encontrado');
                 return;
             }
 
-            // Navigate to confirmation with driver info
             router.push({
                 pathname: '/passenger/payment-confirmation' as any,
                 params: {
                     amount: amount,
                     transportType: selectedTransport,
                     userId: driver.id.toString(),
-                    // We pass these to avoid re-fetching if possible, 
-                    // but payment-confirmation will fetch anyway for safety
                 }
             });
         } catch (err: any) {
@@ -127,198 +136,152 @@ export default function PayTransportScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
+            <LinearGradient
+                colors={[BrandColors.primary, BrandColors.primaryDark]}
+                style={styles.gradient}
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                        <Ionicons name="arrow-back" size={24} color={BrandColors.white} />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Pagar Transporte</Text>
+                    <View style={{ width: 40 }} />
+                </View>
+
+                {/* Tabs */}
+                <View style={styles.tabs}>
+                    <TouchableOpacity
+                        style={[styles.tab, activeTab === 'scan' && styles.tabActive]}
+                        onPress={() => setActiveTab('scan')}
+                    >
+                        <Ionicons
+                            name="qr-code-outline"
+                            size={20}
+                            color={activeTab === 'scan' ? BrandColors.primary : BrandColors.white}
+                        />
+                        <Text style={[styles.tabText, activeTab === 'scan' && styles.tabTextActive]}>
+                            Escáner
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.tab, activeTab === 'manual' && styles.tabActive]}
+                        onPress={() => setActiveTab('manual')}
+                    >
+                        <Ionicons
+                            name="create-outline"
+                            size={20}
+                            color={activeTab === 'manual' ? BrandColors.primary : BrandColors.white}
+                        />
+                        <Text style={[styles.tabText, activeTab === 'manual' && styles.tabTextActive]}>
+                            Manual
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            </LinearGradient>
+
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color={BrandColors.gray[900]} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Pagar Transporte</Text>
-                    <View style={styles.placeholder} />
-                </View>
-
                 <ScrollView contentContainerStyle={styles.content}>
-                    <Card variant="outlined" style={styles.instructionsCard}>
-                        <View style={styles.instructionRow}>
-                            <Ionicons name="information-circle-outline" size={24} color={BrandColors.primary} />
-                            <Text style={styles.instructionText}>
-                                Selecciona el tipo de transporte, ingresa el valor indicado por el conductor e identifícalo para pagar.
-                            </Text>
-                        </View>
-                    </Card>
+                    {activeTab === 'scan' ? (
+                        <View style={styles.tabContent}>
+                            <AnimatedTouchable
+                                entering={FadeInDown.delay(100).springify()}
+                                style={styles.scanCard}
+                                onPress={handleOpenScanner}
+                                activeOpacity={0.8}
+                            >
+                                <View style={styles.scanIconContainer}>
+                                    <Ionicons name="scan" size={48} color={BrandColors.primary} />
+                                </View>
+                                <Text style={styles.scanTitle}>Escanear Código QR</Text>
+                                <Text style={styles.scanSubtitle}>
+                                    Paga rápidamente escaneando el código en el vehículo
+                                </Text>
+                            </AnimatedTouchable>
 
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Tipo de transporte</Text>
-                        <View style={styles.transportGrid}>
-                            {TRANSPORT_TYPES.map((transport) => (
-                                <TouchableOpacity
-                                    key={transport.id}
-                                    style={[
-                                        styles.transportGridItem,
-                                        selectedTransport === transport.id ? styles.transportGridItemActive : null,
-                                    ]}
-                                    onPress={() => {
-                                        setSelectedTransport(transport.id);
-                                        setError('');
-                                    }}
-                                >
-                                    <View
+                            <Card variant="outlined" style={styles.instructionsCard}>
+                                <View style={styles.instructionRow}>
+                                    <Ionicons name="information-circle-outline" size={24} color={BrandColors.primary} />
+                                    <Text style={styles.instructionText}>
+                                        Apunta tu cámara al código QR del conductor. Luego podrás ingresar el valor del pasaje.
+                                    </Text>
+                                </View>
+                            </Card>
+                        </View>
+                    ) : (
+                        <Animated.View entering={FadeInDown.duration(300)} style={styles.tabContent}>
+                            <Text style={styles.sectionTitle}>Tipo de transporte</Text>
+                            <View style={styles.transportGrid}>
+                                {TRANSPORT_TYPES.map((transport) => (
+                                    <TouchableOpacity
+                                        key={transport.id}
                                         style={[
-                                            styles.transportIcon,
-                                            selectedTransport === transport.id ? styles.transportIconActive : null,
+                                            styles.transportGridItem,
+                                            selectedTransport === transport.id ? styles.transportGridItemActive : null,
                                         ]}
+                                        onPress={() => setSelectedTransport(transport.id)}
                                     >
                                         <Ionicons
                                             name={transport.icon}
-                                            size={28}
-                                            color={
-                                                selectedTransport === transport.id
-                                                    ? BrandColors.primary
-                                                    : BrandColors.gray[600]
-                                            }
+                                            size={24}
+                                            color={selectedTransport === transport.id ? BrandColors.primary : BrandColors.gray[500]}
                                         />
-                                    </View>
-                                    <Text style={[
-                                        styles.transportName,
-                                        selectedTransport === transport.id ? styles.transportNameActive : null
-                                    ]}>
-                                        {transport.name}
-                                    </Text>
+                                        <Text style={[styles.transportName, selectedTransport === transport.id && styles.transportNameActive]}>
+                                            {transport.name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+
+                            <Text style={styles.sectionTitle}>Datos del pago</Text>
+                            <Input
+                                placeholder="Valor del pasaje"
+                                value={amount}
+                                onChangeText={(text) => setAmount(text.replace(/[^0-9]/g, ''))}
+                                keyboardType="numeric"
+                                leftIcon="cash-outline"
+                                helperText={`Saldo: ${formatCurrency(balance)}`}
+                            />
+
+                            <View style={styles.methodSelector}>
+                                <TouchableOpacity
+                                    style={[styles.methodBtn, manualMethod === 'username' && styles.methodBtnActive]}
+                                    onPress={() => setManualMethod('username')}
+                                >
+                                    <Text style={[styles.methodBtnText, manualMethod === 'username' && styles.methodBtnTextActive]}>Username</Text>
                                 </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
+                                <TouchableOpacity
+                                    style={[styles.methodBtn, manualMethod === 'phone' && styles.methodBtnActive]}
+                                    onPress={() => setManualMethod('phone')}
+                                >
+                                    <Text style={[styles.methodBtnText, manualMethod === 'phone' && styles.methodBtnTextActive]}>Teléfono</Text>
+                                </TouchableOpacity>
+                            </View>
 
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Valor del pasaje</Text>
-                        <Input
-                            placeholder="Ej: 2.500"
-                            value={amount}
-                            onChangeText={(text) => {
-                                setAmount(text.replace(/[^0-9]/g, ''));
-                                setError('');
-                            }}
-                            keyboardType="numeric"
-                            leftIcon="cash-outline"
-                            helperText={`Saldo disponible: ${formatCurrency(balance)}`}
-                            error={(error && (error.includes('valor') || error.includes('Saldo'))) ? error : undefined}
-                        />
-                    </View>
+                            <Input
+                                placeholder={manualMethod === 'username' ? "@usuario" : "Número de celular"}
+                                value={manualValue}
+                                onChangeText={setManualValue}
+                                leftIcon={manualMethod === 'username' ? "at-outline" : "call-outline"}
+                                autoCapitalize="none"
+                            />
 
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Identificación del conductor</Text>
-                        <View style={styles.methodSelector}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.methodButton,
-                                    manualType === 'none' ? styles.methodButtonActive : null
-                                ]}
-                                onPress={() => setManualType('none')}
-                            >
-                                <Ionicons
-                                    name="qr-code-outline"
-                                    size={20}
-                                    color={manualType === 'none' ? BrandColors.white : BrandColors.gray[600]}
-                                />
-                                <Text style={[
-                                    styles.methodButtonText,
-                                    manualType === 'none' ? styles.methodButtonTextActive : null
-                                ]}>QR</Text>
-                            </TouchableOpacity>
+                            {error ? <ErrorMessage message={error} /> : null}
 
-                            <TouchableOpacity
-                                style={[
-                                    styles.methodButton,
-                                    manualType === 'username' ? styles.methodButtonActive : null
-                                ]}
-                                onPress={() => setManualType('username')}
-                            >
-                                <Ionicons
-                                    name="at-outline"
-                                    size={20}
-                                    color={manualType === 'username' ? BrandColors.white : BrandColors.gray[600]}
-                                />
-                                <Text style={[
-                                    styles.methodButtonText,
-                                    manualType === 'username' ? styles.methodButtonTextActive : null
-                                ]}>Username</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[
-                                    styles.methodButton,
-                                    manualType === 'phone' ? styles.methodButtonActive : null
-                                ]}
-                                onPress={() => setManualType('phone')}
-                            >
-                                <Ionicons
-                                    name="call-outline"
-                                    size={20}
-                                    color={manualType === 'phone' ? BrandColors.white : BrandColors.gray[600]}
-                                />
-                                <Text style={[
-                                    styles.methodButtonText,
-                                    manualType === 'phone' ? styles.methodButtonTextActive : null
-                                ]}>Teléfono</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {manualType !== 'none' ? (
-                            <Animated.View entering={FadeInDown.duration(300)}>
-                                <Input
-                                    placeholder={manualType === 'username' ? "Ej: conductor123" : "Ej: 3001234567"}
-                                    value={manualValue}
-                                    onChangeText={(text) => {
-                                        setManualValue(text);
-                                        setError('');
-                                    }}
-                                    keyboardType={manualType === 'phone' ? "phone-pad" : "default"}
-                                    autoCapitalize="none"
-                                    leftIcon={manualType === 'username' ? "at-outline" : "call-outline"}
-                                    error={(error && (error.includes('usuario') || error.includes('teléfono'))) ? error : undefined}
-                                />
-                            </Animated.View>
-                        ) : null}
-                    </View>
-
-                    {!!error && !error.includes('valor') && !error.includes('Saldo') && !error.includes('usuario') && !error.includes('teléfono') ? (
-                        <ErrorMessage message={error} />
-                    ) : null}
-
-                    {!!selectedTransportData && !!amount && !isNaN(parseFloat(amount)) ? (
-                        <Animated.View entering={FadeInDown.duration(400)}>
-                            <Card variant="elevated" style={styles.summaryCard}>
-                                <View style={styles.summaryRow}>
-                                    <Text style={styles.summaryLabel}>Total a pagar</Text>
-                                    <Text style={styles.summaryValue}>{formatCurrency(parseFloat(amount))}</Text>
-                                </View>
-                                <View style={styles.summaryRow}>
-                                    <Text style={styles.summaryLabel}>Transporte</Text>
-                                    <Text style={styles.summaryValue}>{selectedTransportData.name}</Text>
-                                </View>
-                            </Card>
+                            <Button
+                                title="Continuar al Pago"
+                                onPress={handleManualContinue}
+                                loading={isSearching}
+                                disabled={!selectedTransport || !amount || !manualValue}
+                                fullWidth
+                                style={{ marginTop: 10 }}
+                            />
                         </Animated.View>
-                    ) : null}
-
-                    <View style={styles.footer}>
-                        <Button
-                            title={manualType === 'none' ? "Escanear Código QR" : "Continuar al Pago"}
-                            onPress={manualType === 'none' ? handleScanQR : handleManualContinue}
-                            icon={
-                                <Ionicons
-                                    name={manualType === 'none' ? "qr-code-outline" : "arrow-forward-outline"}
-                                    size={20}
-                                    color={BrandColors.white}
-                                />
-                            }
-                            fullWidth
-                            size="large"
-                            loading={isSearching}
-                            disabled={!selectedTransport || !amount || (manualType !== 'none' && !manualValue)}
-                        />
-                    </View>
+                    )}
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
@@ -330,147 +293,162 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: BrandColors.gray[50],
     },
+    gradient: {
+        paddingBottom: 20,
+    },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: BrandColors.white,
-        borderBottomWidth: 1,
-        borderBottomColor: BrandColors.gray[200],
+        paddingHorizontal: 20,
+        paddingVertical: 16,
     },
     backButton: {
         padding: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        borderRadius: 20,
     },
     headerTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: BrandColors.gray[900],
+        flex: 1,
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: BrandColors.white,
+        textAlign: 'center',
     },
-    placeholder: {
-        width: 40,
+    tabs: {
+        flexDirection: 'row',
+        gap: 12,
+        paddingHorizontal: 20,
+        marginTop: 10,
+    },
+    tab: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    },
+    tabActive: {
+        backgroundColor: BrandColors.white,
+    },
+    tabText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: BrandColors.white,
+    },
+    tabTextActive: {
+        color: BrandColors.primary,
     },
     content: {
         padding: 20,
     },
+    tabContent: {
+        gap: 20,
+    },
+    scanCard: {
+        backgroundColor: BrandColors.white,
+        borderRadius: 16,
+        padding: 32,
+        alignItems: 'center',
+        gap: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    scanIconContainer: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: BrandColors.primaryLight,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scanTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: BrandColors.gray[900],
+    },
+    scanSubtitle: {
+        fontSize: 14,
+        color: BrandColors.gray[600],
+        textAlign: 'center',
+        paddingHorizontal: 20,
+    },
     instructionsCard: {
         padding: 16,
-        marginBottom: 24,
-        backgroundColor: BrandColors.primary + '10',
-        borderColor: BrandColors.primary + '30',
     },
     instructionRow: {
         flexDirection: 'row',
-        alignItems: 'center',
         gap: 12,
     },
     instructionText: {
         flex: 1,
         fontSize: 14,
-        color: BrandColors.gray[700],
+        color: BrandColors.gray[600],
         lineHeight: 20,
-    },
-    section: {
-        marginBottom: 24,
     },
     sectionTitle: {
         fontSize: 16,
-        fontWeight: '600',
-        color: BrandColors.gray[900],
-        marginBottom: 12,
+        fontWeight: 'bold',
+        color: BrandColors.gray[800],
+        marginBottom: 8,
     },
     transportGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 12,
+        gap: 10,
+        marginBottom: 10,
     },
     transportGridItem: {
         width: '48%',
-        aspectRatio: 1,
-        backgroundColor: BrandColors.white,
-        borderRadius: 16,
-        padding: 16,
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 2,
+        gap: 10,
+        padding: 12,
+        backgroundColor: BrandColors.white,
+        borderRadius: 12,
+        borderWidth: 1,
         borderColor: BrandColors.gray[200],
     },
     transportGridItemActive: {
         borderColor: BrandColors.primary,
         backgroundColor: BrandColors.primary + '05',
     },
-    transportIcon: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: BrandColors.gray[100],
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    transportIconActive: {
-        backgroundColor: BrandColors.primary + '20',
-    },
     transportName: {
         fontSize: 14,
-        fontWeight: '600',
         color: BrandColors.gray[700],
     },
     transportNameActive: {
+        fontWeight: '600',
         color: BrandColors.primary,
-    },
-    summaryCard: {
-        padding: 16,
-        gap: 12,
-    },
-    summaryRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    summaryLabel: {
-        fontSize: 14,
-        color: BrandColors.gray[600],
-    },
-    summaryValue: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: BrandColors.gray[900],
-    },
-    footer: {
-        marginVertical: 30,
     },
     methodSelector: {
         flexDirection: 'row',
-        backgroundColor: BrandColors.gray[100],
-        borderRadius: 12,
+        backgroundColor: BrandColors.gray[200],
         padding: 4,
-        marginBottom: 16,
+        borderRadius: 10,
+        marginBottom: 12,
     },
-    methodButton: {
+    methodBtn: {
         flex: 1,
-        flexDirection: 'row',
+        paddingVertical: 8,
         alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 10,
         borderRadius: 8,
-        gap: 6,
     },
-    methodButtonActive: {
-        backgroundColor: BrandColors.primary,
-        shadowColor: BrandColors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 2,
+    methodBtnActive: {
+        backgroundColor: BrandColors.white,
     },
-    methodButtonText: {
+    methodBtnText: {
         fontSize: 13,
-        fontWeight: '600',
         color: BrandColors.gray[600],
     },
-    methodButtonTextActive: {
-        color: BrandColors.white,
+    methodBtnTextActive: {
+        fontWeight: 'bold',
+        color: BrandColors.primary,
     },
 });
+

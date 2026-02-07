@@ -105,6 +105,21 @@ export default function ConductorDashboard() {
         );
     };
 
+    const handleProtectedAction = (action: () => void) => {
+        if (!completenessData?.completed) {
+            Alert.alert(
+                'Perfil Incompleto',
+                'Debes completar tu perfil (incluyendo datos del vehículo) y estar verificado para realizar esta acción.',
+                [
+                    { text: 'Ahora no', style: 'cancel' },
+                    { text: 'Completar Perfil', onPress: () => router.push('/conductor/edit-profile' as any) }
+                ]
+            );
+            return;
+        }
+        action();
+    };
+
     const fetchDashboardData = useCallback(async () => {
         await Promise.all([
             refetchStats(),
@@ -279,7 +294,7 @@ export default function ConductorDashboard() {
                             <View style={styles.earningsIconContainer}>
                                 <TouchableOpacity
                                     style={styles.withdrawButtonHeader}
-                                    onPress={() => setWithdrawalVisible(true)}
+                                    onPress={() => handleProtectedAction(() => setWithdrawalVisible(true))}
                                 >
                                     <Text style={styles.withdrawButtonText}>Retirar</Text>
                                     <Ionicons name="arrow-forward" size={14} color={BrandColors.primary} />
@@ -309,10 +324,10 @@ export default function ConductorDashboard() {
                     <Text style={styles.sectionTitle}>Acciones rápidas</Text>
                     <View style={styles.actionsGrid}>
                         {[
-                            { id: 'receive', title: 'Recibir Pago', icon: 'qr-code', color: '#4CAF50', action: () => setQrPaymentVisible(true) },
-                            { id: 'withdraw', title: 'Retirar', icon: 'cash', color: '#FF9800', action: () => setWithdrawalVisible(true) },
+                            { id: 'receive', title: 'Recibir Pago', icon: 'qr-code', color: '#4CAF50', action: () => handleProtectedAction(() => setQrPaymentVisible(true)) },
+                            { id: 'withdraw', title: 'Retirar', icon: 'cash', color: '#FF9800', action: () => handleProtectedAction(() => setWithdrawalVisible(true)) },
                             { id: 'history', title: 'Historial', icon: 'receipt', color: '#2196F3', action: () => router.push('/conductor/transactions' as any) },
-                            { id: 'my-qr', title: 'Mi QR', icon: 'person', color: '#9C27B0', action: () => setMyQrVisible(true) },
+                            { id: 'my-qr', title: 'Mi QR', icon: 'person', color: '#9C27B0', action: () => handleProtectedAction(() => setMyQrVisible(true)) },
                             { id: 'support', title: 'Soporte', icon: 'help-buoy', color: '#607D8B', action: () => router.push('/conductor/help' as any) },
                             { id: 'emergency', title: 'Emergencia', icon: 'alert-circle', color: '#F44336', action: handleEmergency },
                         ].map((action, index) => (

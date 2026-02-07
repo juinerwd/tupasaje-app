@@ -104,12 +104,6 @@ export default function PassengerLayout() {
                     }}
                 />
                 <Tabs.Screen
-                    name="qr-payment"
-                    options={{
-                        href: null, // Ocultar de los tabs
-                    }}
-                />
-                <Tabs.Screen
                     name="wallet"
                     options={{
                         href: null // Ocultar de los tabs

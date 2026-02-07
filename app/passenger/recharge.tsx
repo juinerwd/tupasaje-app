@@ -1,11 +1,15 @@
+import { SecurityVerificationModal } from '@/components/SecurityVerificationModal';
 import { Button, Card, ErrorMessage } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
+import { useProfileCompleteness } from '@/hooks/useProfile';
 import { useFictitiousRecharge, useRedeemCode } from '@/hooks/useRecharge';
+import { useAuthStore } from '@/store/authStore';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+    Alert,
     ScrollView,
     StyleSheet,
     Text,
@@ -19,12 +23,15 @@ const QUICK_AMOUNTS = [10000, 20000, 50000, 100000];
 
 export default function RechargeScreen() {
     const router = useRouter();
+    const { user } = useAuthStore();
+    const { data: completenessData } = useProfileCompleteness();
     const [amount, setAmount] = useState('');
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
     const [rechargeCode, setRechargeCode] = useState('');
     const { mutate: recharge, isPending: isLoading } = useFictitiousRecharge();
     const { mutate: redeem, isPending: isRedeeming } = useRedeemCode();
     const [error, setError] = useState('');
+    const [isSecurityModalVisible, setIsSecurityModalVisible] = useState(false);
 
     const paymentMethods = [
         { id: 'pse', name: 'PSE', icon: 'card-outline' as keyof typeof Ionicons.glyphMap },
@@ -40,6 +47,21 @@ export default function RechargeScreen() {
     };
 
     const handleRecharge = async () => {
+        // Validar perfil completo
+        const isProfileComplete = user?.profileCompleted || completenessData?.completed;
+
+        if (user && !isProfileComplete) {
+            Alert.alert(
+                'Perfil Incompleto',
+                'Debes completar tu información personal para realizar recargas.',
+                [
+                    { text: 'Ahora no', style: 'cancel' },
+                    { text: 'Completar Perfil', onPress: () => router.push('/passenger/edit-profile') }
+                ]
+            );
+            return;
+        }
+
         if (selectedPaymentMethod === 'code') {
             if (!rechargeCode) {
                 setError('Ingresa un código de recarga');
@@ -76,6 +98,12 @@ export default function RechargeScreen() {
         }
 
         setError('');
+
+        setIsSecurityModalVisible(true);
+    };
+
+    const proceedWithRecharge = () => {
+        setIsSecurityModalVisible(false);
 
         recharge(
             { amount: parseInt(amount) },
@@ -261,6 +289,13 @@ export default function RechargeScreen() {
                     size="large"
                 />
             </View>
+            <SecurityVerificationModal
+                visible={isSecurityModalVisible}
+                onSuccess={proceedWithRecharge}
+                onCancel={() => setIsSecurityModalVisible(false)}
+                title="Confirmar Recarga"
+                subtitle={`Confirma la recarga de ${formatCurrency(parseInt(amount || '0'))}`}
+            />
         </SafeAreaView>
     );
 }

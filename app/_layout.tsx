@@ -10,7 +10,12 @@ import { AutoLogoutMessage } from '@/components/AutoLogoutMessage';
 import { configToMilliseconds, getAutoLogoutConfig } from '@/config/autoLogoutConfig';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { useSocketNotifications } from '@/hooks/useSocketNotifications';
+
 import { queryClient } from '@/lib/queryClient';
+
+
 import { useAuthStore } from '@/store/authStore';
 import { hasValidTokens } from '@/utils/secureStorage';
 import { View } from 'react-native';
@@ -25,6 +30,10 @@ function RootLayoutContent() {
   const router = useRouter();
   const segments = useSegments();
   const [showAutoLogoutMessage, setShowAutoLogoutMessage] = React.useState(false);
+
+  // REAL-TIME NOTIFICATIONS
+  useSocketNotifications();
+  usePushNotifications();
 
   // AUTO LOGOUT SETTINGS
   const autoLogoutConfig = getAutoLogoutConfig();

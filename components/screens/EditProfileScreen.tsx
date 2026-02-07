@@ -1,15 +1,18 @@
-import { Button, Card } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import { useUpdateDriverProfile } from '@/hooks/useConductor';
 import { useUpdatePassengerProfile } from '@/hooks/usePassenger';
 import { useUpdateProfile, useUserProfile } from '@/hooks/useProfile';
 import { checkUsernameAvailability, CheckUsernameResponse, updateUsername } from '@/services/usernameService';
 import { useAuthStore } from '@/store/authStore';
+import { useSettingsStore } from '@/store/settingsStore';
 import { formatDateOfBirth, formatDateOfBirthLong } from '@/utils/formatters';
+import { vehiclePlateSchema } from '@/utils/validation';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
@@ -18,10 +21,11 @@ import {
     Platform,
     ScrollView,
     StyleSheet,
+    Switch,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import Animated, {
     FadeInDown,
@@ -38,6 +42,8 @@ export default function EditProfile() {
     const updateProfileMutation = useUpdateProfile();
     const updateDriverProfileMutation = useUpdateDriverProfile();
     const updatePassengerProfileMutation = useUpdatePassengerProfile();
+
+    const { biometricsEnabled, setBiometricsEnabled } = useSettingsStore();
 
     const user = queryUser || storeUser;
 
@@ -57,6 +63,12 @@ export default function EditProfile() {
     const [vehicleYear, setVehicleYear] = useState('');
     const [vehicleColor, setVehicleColor] = useState('');
     const [vehicleType, setVehicleType] = useState('');
+
+    // Passenger specific state
+    const [preferredPaymentMethod, setPreferredPaymentMethod] = useState('');
+    const [autoRecharge, setAutoRecharge] = useState(false);
+    const [autoRechargeThreshold, setAutoRechargeThreshold] = useState('');
+    const [autoRechargeAmount, setAutoRechargeAmount] = useState('');
 
     // Username state
     const [username, setUsername] = useState(user?.username || '');
@@ -82,6 +94,15 @@ export default function EditProfile() {
                 setVehicleYear(driver.vehicleYear?.toString() || '');
                 setVehicleColor(driver.vehicleColor || '');
                 setVehicleType(driver.vehicleType || '');
+            }
+
+            // Initialize passenger data if applicable
+            if (queryUser.role === 'PASSENGER' && (queryUser as any).passenger) {
+                const passenger = (queryUser as any).passenger;
+                setPreferredPaymentMethod(passenger.preferredPaymentMethod || '');
+                setAutoRecharge(passenger.autoRecharge || false);
+                setAutoRechargeThreshold(passenger.autoRechargeThreshold?.toString() || '');
+                setAutoRechargeAmount(passenger.autoRechargeAmount?.toString() || '');
             }
         } else if (storeUser) {
             setFirstName(storeUser.firstName || '');
@@ -175,6 +196,31 @@ export default function EditProfile() {
             }
         }
 
+        // Driver validation
+        if (user?.role === 'DRIVER') {
+            if (!vehiclePlate.trim() || !vehicleModel.trim() || !vehicleYear.trim() || !vehicleColor.trim() || !vehicleType.trim()) {
+                Alert.alert(
+                    'Información Incompleta',
+                    'Como conductor, debes completar todos los datos de tu vehículo para poder recibir pagos.'
+                );
+                return;
+            }
+
+            const plateValidation = vehiclePlateSchema.safeParse(vehiclePlate.trim());
+            if (!plateValidation.success) {
+                Alert.alert('Placa Inválida', plateValidation.error.issues[0].message);
+                return;
+            }
+
+            const yearNum = parseInt(vehicleYear);
+            const currentYear = new Date().getFullYear();
+            if (isNaN(yearNum) || yearNum < 1990 || yearNum > currentYear + 1) {
+                Alert.alert('Año Inválido', `El año del vehículo debe estar entre 1990 y ${currentYear + 1}`);
+                return;
+            }
+        }
+
+
         // Prepare update data
         const updateData: any = {};
         if (firstName !== user?.firstName) updateData.firstName = firstName.trim();
@@ -191,6 +237,15 @@ export default function EditProfile() {
             if (vehicleYear !== driver.vehicleYear?.toString()) updateData.vehicleYear = parseInt(vehicleYear) || undefined;
             if (vehicleColor !== driver.vehicleColor) updateData.vehicleColor = vehicleColor.trim();
             if (vehicleType !== driver.vehicleType) updateData.vehicleType = vehicleType.trim();
+        }
+
+        // Add passenger specific data if applicable
+        if (user?.role === 'PASSENGER') {
+            const passenger = (user as any).passenger || {};
+            if (preferredPaymentMethod !== passenger.preferredPaymentMethod) updateData.preferredPaymentMethod = preferredPaymentMethod;
+            if (autoRecharge !== passenger.autoRecharge) updateData.autoRecharge = autoRecharge;
+            if (autoRechargeThreshold !== passenger.autoRechargeThreshold?.toString()) updateData.autoRechargeThreshold = parseFloat(autoRechargeThreshold) || undefined;
+            if (autoRechargeAmount !== passenger.autoRechargeAmount?.toString()) updateData.autoRechargeAmount = parseFloat(autoRechargeAmount) || undefined;
         }
 
         const hasChanges = Object.keys(updateData).length > 0;
@@ -210,6 +265,8 @@ export default function EditProfile() {
                 if (hasChanges) {
                     if (user?.role === 'DRIVER') {
                         await updateDriverProfileMutation.mutateAsync(updateData);
+                    } else if (user?.role === 'PASSENGER') {
+                        await updatePassengerProfileMutation.mutateAsync(updateData);
                     } else {
                         await updateProfileMutation.mutateAsync(updateData);
                     }
@@ -246,12 +303,17 @@ export default function EditProfile() {
     };
 
     const handleCancel = () => {
+        const passenger = (user as any).passenger || {};
         const hasChanges =
             firstName !== user?.firstName ||
             lastName !== user?.lastName ||
-            bio !== user?.bio ||
+            bio !== (user?.bio || '') ||
             dateOfBirth !== user?.dateOfBirth ||
-            gender !== user?.gender;
+            gender !== user?.gender ||
+            (!user?.username && username.trim() !== '') ||
+            autoRecharge !== passenger.autoRecharge ||
+            autoRechargeThreshold !== (passenger.autoRechargeThreshold?.toString() || '') ||
+            autoRechargeAmount !== (passenger.autoRechargeAmount?.toString() || '');
 
         if (hasChanges) {
             Alert.alert(
@@ -375,272 +437,414 @@ export default function EditProfile() {
                         style={styles.section}
                     >
                         <Text style={styles.sectionTitle}>Información Personal</Text>
-                        <Card variant="elevated" style={styles.formCard}>
-                            {/* First Name */}
+                        {/* Account Info (Read-only) */}
+                        <View style={styles.roleSection}>
+                            <Text style={styles.roleSectionTitle}>Información de Cuenta</Text>
+
+                            {/* Document ID */}
                             <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Nombre *</Text>
-                                <View style={styles.inputContainer}>
-                                    <Ionicons name="person-outline" size={20} color={BrandColors.gray[400]} />
-                                    <TextInput
-                                        style={styles.input}
-                                        value={firstName}
-                                        onChangeText={setFirstName}
-                                        placeholder="Ingresa tu nombre"
-                                        placeholderTextColor={BrandColors.gray[400]}
-                                        maxLength={50}
-                                    />
+                                <Text style={styles.inputLabel}>Documento de Identidad</Text>
+                                <View style={[styles.inputContainer, styles.readOnlyInput]}>
+                                    <Ionicons name="id-card-outline" size={20} color={BrandColors.gray[400]} />
+                                    <Text style={styles.readOnlyText}>
+                                        {user?.typeDni} - {user?.numberDni}
+                                    </Text>
+                                    <View style={{ flex: 1 }} />
+                                    <Ionicons name="lock-closed" size={16} color={BrandColors.gray[400]} />
                                 </View>
                             </View>
 
-                            {/* Last Name */}
+                            {/* Phone Number */}
                             <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Apellido *</Text>
-                                <View style={styles.inputContainer}>
-                                    <Ionicons name="person-outline" size={20} color={BrandColors.gray[400]} />
-                                    <TextInput
-                                        style={styles.input}
-                                        value={lastName}
-                                        onChangeText={setLastName}
-                                        placeholder="Ingresa tu apellido"
-                                        placeholderTextColor={BrandColors.gray[400]}
-                                        maxLength={50}
-                                    />
+                                <Text style={styles.inputLabel}>Teléfono</Text>
+                                <View style={[styles.inputContainer, styles.readOnlyInput]}>
+                                    <Ionicons name="call-outline" size={20} color={BrandColors.gray[400]} />
+                                    <Text style={styles.readOnlyText}>{user?.phoneNumber}</Text>
+                                    <View style={{ flex: 1 }} />
+                                    {user?.phoneVerified && (
+                                        <Ionicons name="checkmark-circle" size={16} color={BrandColors.success} />
+                                    )}
+                                    <Ionicons name="lock-closed" size={16} color={BrandColors.gray[400]} style={{ marginLeft: 4 }} />
                                 </View>
                             </View>
 
-                            {/* Username */}
+                            {/* Email */}
                             <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>
-                                    Username {user?.username ? '(Permanente)' : ''}
-                                </Text>
-                                <View style={[
-                                    styles.inputContainer,
-                                    usernameError && styles.inputContainerError,
-                                    usernameAvailability?.available && !usernameError && styles.inputContainerSuccess,
-                                ]}>
-                                    <Ionicons name="at-outline" size={20} color={BrandColors.gray[400]} />
-                                    <TextInput
-                                        style={styles.input}
-                                        value={username}
-                                        onChangeText={setUsername}
-                                        placeholder={user?.username ? user.username : "Elige tu username único"}
-                                        placeholderTextColor={BrandColors.gray[400]}
-                                        maxLength={20}
-                                        autoCapitalize="none"
-                                        autoCorrect={false}
-                                        editable={!user?.username}
-                                    />
-                                    {isCheckingUsername && (
-                                        <ActivityIndicator size="small" color={BrandColors.primary} />
+                                <Text style={styles.inputLabel}>Correo Electrónico</Text>
+                                <View style={[styles.inputContainer, styles.readOnlyInput]}>
+                                    <Ionicons name="mail-outline" size={20} color={BrandColors.gray[400]} />
+                                    <Text style={styles.readOnlyText}>{user?.email}</Text>
+                                    <View style={{ flex: 1 }} />
+                                    {user?.emailVerified && (
+                                        <Ionicons name="checkmark-circle" size={16} color={BrandColors.success} />
                                     )}
-                                    {!isCheckingUsername && username.length >= 3 && !user?.username && (
-                                        <>
-                                            {usernameAvailability?.available && !usernameError && (
-                                                <Ionicons name="checkmark-circle" size={20} color={BrandColors.success} />
-                                            )}
-                                            {(usernameError || !usernameAvailability?.available) && (
-                                                <Ionicons name="close-circle" size={20} color={BrandColors.error} />
-                                            )}
-                                        </>
-                                    )}
-                                    {user?.username && (
-                                        <Ionicons name="lock-closed" size={20} color={BrandColors.gray[400]} />
-                                    )}
+                                    <Ionicons name="lock-closed" size={16} color={BrandColors.gray[400]} style={{ marginLeft: 4 }} />
                                 </View>
-                                {!user?.username && (
-                                    <Text style={styles.charCount}>{username.length}/20 caracteres</Text>
+                            </View>
+
+                            <View style={styles.sectionDivider} />
+                        </View>
+                        {/* First Name */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Nombre *</Text>
+                            <View style={styles.inputContainer}>
+                                <Ionicons name="person-outline" size={20} color={BrandColors.gray[400]} />
+                                <TextInput
+                                    style={styles.input}
+                                    value={firstName}
+                                    onChangeText={setFirstName}
+                                    placeholder="Ingresa tu nombre"
+                                    placeholderTextColor={BrandColors.gray[400]}
+                                    maxLength={50}
+                                />
+                            </View>
+                        </View>
+
+                        {/* Last Name */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Apellido *</Text>
+                            <View style={styles.inputContainer}>
+                                <Ionicons name="person-outline" size={20} color={BrandColors.gray[400]} />
+                                <TextInput
+                                    style={styles.input}
+                                    value={lastName}
+                                    onChangeText={setLastName}
+                                    placeholder="Ingresa tu apellido"
+                                    placeholderTextColor={BrandColors.gray[400]}
+                                    maxLength={50}
+                                />
+                            </View>
+                        </View>
+
+                        {/* Username */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>
+                                Username {user?.username ? '(Permanente)' : ''}
+                            </Text>
+                            <View style={[
+                                styles.inputContainer,
+                                usernameError && styles.inputContainerError,
+                                usernameAvailability?.available && !usernameError && styles.inputContainerSuccess,
+                            ]}>
+                                <Ionicons name="at-outline" size={20} color={BrandColors.gray[400]} />
+                                <TextInput
+                                    style={styles.input}
+                                    value={username}
+                                    onChangeText={setUsername}
+                                    placeholder={user?.username ? user.username : "Elige tu username único"}
+                                    placeholderTextColor={BrandColors.gray[400]}
+                                    maxLength={20}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    editable={!user?.username}
+                                />
+                                {isCheckingUsername && (
+                                    <ActivityIndicator size="small" color={BrandColors.primary} />
                                 )}
-                                {usernameError && !user?.username && (
-                                    <Text style={styles.errorText}>{usernameError}</Text>
-                                )}
-                                {usernameAvailability?.available && !usernameError && username.length >= 3 && !user?.username && (
-                                    <Text style={styles.successText}>✓ Username disponible</Text>
+                                {!isCheckingUsername && username.length >= 3 && !user?.username && (
+                                    <>
+                                        {usernameAvailability?.available && !usernameError && (
+                                            <Ionicons name="checkmark-circle" size={20} color={BrandColors.success} />
+                                        )}
+                                        {(usernameError || !usernameAvailability?.available) && (
+                                            <Ionicons name="close-circle" size={20} color={BrandColors.error} />
+                                        )}
+                                    </>
                                 )}
                                 {user?.username && (
-                                    <Text style={styles.inputHint}>
-                                        ⚠️ El username no se puede cambiar una vez establecido
-                                    </Text>
-                                )}
-                                {!user?.username && !usernameError && username.length < 3 && (
-                                    <Text style={styles.inputHint}>
-                                        Mínimo 3 caracteres, solo letras y números
-                                    </Text>
+                                    <Ionicons name="lock-closed" size={20} color={BrandColors.gray[400]} />
                                 )}
                             </View>
+                            {!user?.username && (
+                                <Text style={styles.charCount}>{username.length}/20 caracteres</Text>
+                            )}
+                            {usernameError && !user?.username && (
+                                <Text style={styles.errorText}>{usernameError}</Text>
+                            )}
+                            {usernameAvailability?.available && !usernameError && username.length >= 3 && !user?.username && (
+                                <Text style={styles.successText}>✓ Username disponible</Text>
+                            )}
+                            {user?.username && (
+                                <Text style={styles.inputHint}>
+                                    ⚠️ El username no se puede cambiar una vez establecido
+                                </Text>
+                            )}
+                            {!user?.username && !usernameError && username.length < 3 && (
+                                <Text style={styles.inputHint}>
+                                    Mínimo 3 caracteres, solo letras y números
+                                </Text>
+                            )}
+                        </View>
 
-                            {/* Bio */}
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Biografía</Text>
-                                <View style={[styles.inputContainer, styles.textAreaContainer]}>
-                                    <TextInput
-                                        style={[styles.input, styles.textArea]}
-                                        value={bio}
-                                        onChangeText={setBio}
-                                        placeholder="Cuéntanos sobre ti..."
-                                        placeholderTextColor={BrandColors.gray[400]}
-                                        multiline
-                                        numberOfLines={4}
-                                        maxLength={500}
-                                        textAlignVertical="top"
+                        {/* Bio */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Biografía</Text>
+                            <View style={[styles.inputContainer, styles.textAreaContainer]}>
+                                <TextInput
+                                    style={[styles.input, styles.textArea]}
+                                    value={bio}
+                                    onChangeText={setBio}
+                                    placeholder="Cuéntanos sobre ti..."
+                                    placeholderTextColor={BrandColors.gray[400]}
+                                    multiline
+                                    numberOfLines={4}
+                                    maxLength={500}
+                                    textAlignVertical="top"
+                                />
+                            </View>
+                            <Text style={styles.charCount}>{bio.length}/500</Text>
+                        </View>
+
+                        {/* Driver Specific Fields: Vehicle Info */}
+                        {user?.role === 'DRIVER' && (
+                            <View style={styles.roleSection}>
+                                <View style={styles.sectionDivider} />
+                                <Text style={styles.roleSectionTitle}>Información del Vehículo</Text>
+                                <Text style={styles.inputHint}>* Campos obligatorios para recibir pagos</Text>
+
+                                {/* Vehicle Plate */}
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>Placa del Vehículo *</Text>
+                                    <View style={styles.inputContainer}>
+                                        <Ionicons name="card-outline" size={20} color={BrandColors.gray[400]} />
+                                        <TextInput
+                                            style={styles.input}
+                                            value={vehiclePlate}
+                                            onChangeText={setVehiclePlate}
+                                            placeholder="Ej: ABC-123"
+                                            placeholderTextColor={BrandColors.gray[400]}
+                                            autoCapitalize="characters"
+                                        />
+                                    </View>
+                                </View>
+
+                                {/* Vehicle Model */}
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>Modelo / Marca *</Text>
+                                    <View style={styles.inputContainer}>
+                                        <Ionicons name="car-outline" size={20} color={BrandColors.gray[400]} />
+                                        <TextInput
+                                            style={styles.input}
+                                            value={vehicleModel}
+                                            onChangeText={setVehicleModel}
+                                            placeholder="Ej: Chevrolet Onix"
+                                            placeholderTextColor={BrandColors.gray[400]}
+                                        />
+                                    </View>
+                                </View>
+
+                                <View style={styles.row}>
+                                    {/* Vehicle Year */}
+                                    <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                                        <Text style={styles.inputLabel}>Año *</Text>
+                                        <View style={styles.inputContainer}>
+                                            <TextInput
+                                                style={styles.input}
+                                                value={vehicleYear}
+                                                onChangeText={setVehicleYear}
+                                                placeholder="2023"
+                                                placeholderTextColor={BrandColors.gray[400]}
+                                                keyboardType="numeric"
+                                                maxLength={4}
+                                            />
+                                        </View>
+                                    </View>
+
+                                    {/* Vehicle Color */}
+                                    <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                                        <Text style={styles.inputLabel}>Color *</Text>
+                                        <View style={styles.inputContainer}>
+                                            <TextInput
+                                                style={styles.input}
+                                                value={vehicleColor}
+                                                onChangeText={setVehicleColor}
+                                                placeholder="Blanco"
+                                                placeholderTextColor={BrandColors.gray[400]}
+                                            />
+                                        </View>
+                                    </View>
+                                </View>
+
+                                {/* Vehicle Type */}
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>Tipo de Vehículo *</Text>
+                                    <View style={styles.inputContainer}>
+                                        <TextInput
+                                            style={styles.input}
+                                            value={vehicleType}
+                                            onChangeText={setVehicleType}
+                                            placeholder="Ej: Sedan, SUV, Moto"
+                                            placeholderTextColor={BrandColors.gray[400]}
+                                        />
+                                    </View>
+                                </View>
+                                <View style={styles.sectionDivider} />
+                            </View>
+                        )}
+
+                        {/* Passenger Specific Fields: Recharge Preferences */}
+                        {user?.role === 'PASSENGER' && (
+                            <View style={styles.roleSection}>
+                                <View style={styles.sectionDivider} />
+                                <View style={styles.rowBetween}>
+                                    <Text style={styles.roleSectionTitle}>Configuración de Recarga</Text>
+                                    <Switch
+                                        value={autoRecharge}
+                                        onValueChange={setAutoRecharge}
+                                        trackColor={{ false: BrandColors.gray[300], true: BrandColors.primary }}
+                                        thumbColor={Platform.OS === 'ios' ? undefined : BrandColors.white}
                                     />
                                 </View>
-                                <Text style={styles.charCount}>{bio.length}/500</Text>
+                                <Text style={styles.inputHint}>
+                                    Recarga automáticamente tu cuenta cuando el saldo sea bajo.
+                                </Text>
+
+                                {autoRecharge && (
+                                    <Animated.View entering={FadeInDown.duration(300)}>
+                                        <View style={styles.row}>
+                                            {/* Threshold */}
+                                            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                                                <Text style={styles.inputLabel}>Mínimo Saldo (COP)</Text>
+                                                <View style={styles.inputContainer}>
+                                                    <TextInput
+                                                        style={styles.input}
+                                                        value={autoRechargeThreshold}
+                                                        onChangeText={setAutoRechargeThreshold}
+                                                        placeholder="5000"
+                                                        placeholderTextColor={BrandColors.gray[400]}
+                                                        keyboardType="numeric"
+                                                    />
+                                                </View>
+                                            </View>
+
+                                            {/* Amount */}
+                                            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                                                <Text style={styles.inputLabel}>Monto a Recargar (COP)</Text>
+                                                <View style={styles.inputContainer}>
+                                                    <TextInput
+                                                        style={styles.input}
+                                                        value={autoRechargeAmount}
+                                                        onChangeText={setAutoRechargeAmount}
+                                                        placeholder="20000"
+                                                        placeholderTextColor={BrandColors.gray[400]}
+                                                        keyboardType="numeric"
+                                                    />
+                                                </View>
+                                            </View>
+                                        </View>
+                                    </Animated.View>
+                                )}
+                                <View style={styles.sectionDivider} />
                             </View>
+                        )}
 
-                            {/* Driver Specific Fields: Vehicle Info */}
-                            {user?.role === 'DRIVER' && (
-                                <View style={styles.roleSection}>
-                                    <View style={styles.sectionDivider} />
-                                    <Text style={styles.roleSectionTitle}>Información del Vehículo</Text>
-
-                                    {/* Vehicle Plate */}
-                                    <View style={styles.inputGroup}>
-                                        <Text style={styles.inputLabel}>Placa del Vehículo</Text>
-                                        <View style={styles.inputContainer}>
-                                            <Ionicons name="card-outline" size={20} color={BrandColors.gray[400]} />
-                                            <TextInput
-                                                style={styles.input}
-                                                value={vehiclePlate}
-                                                onChangeText={setVehiclePlate}
-                                                placeholder="Ej: ABC-123"
-                                                placeholderTextColor={BrandColors.gray[400]}
-                                                autoCapitalize="characters"
-                                            />
-                                        </View>
-                                    </View>
-
-                                    {/* Vehicle Model */}
-                                    <View style={styles.inputGroup}>
-                                        <Text style={styles.inputLabel}>Modelo / Marca</Text>
-                                        <View style={styles.inputContainer}>
-                                            <Ionicons name="car-outline" size={20} color={BrandColors.gray[400]} />
-                                            <TextInput
-                                                style={styles.input}
-                                                value={vehicleModel}
-                                                onChangeText={setVehicleModel}
-                                                placeholder="Ej: Chevrolet Onix"
-                                                placeholderTextColor={BrandColors.gray[400]}
-                                            />
-                                        </View>
-                                    </View>
-
-                                    <View style={styles.row}>
-                                        {/* Vehicle Year */}
-                                        <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                                            <Text style={styles.inputLabel}>Año</Text>
-                                            <View style={styles.inputContainer}>
-                                                <TextInput
-                                                    style={styles.input}
-                                                    value={vehicleYear}
-                                                    onChangeText={setVehicleYear}
-                                                    placeholder="2023"
-                                                    placeholderTextColor={BrandColors.gray[400]}
-                                                    keyboardType="numeric"
-                                                    maxLength={4}
-                                                />
-                                            </View>
-                                        </View>
-
-                                        {/* Vehicle Color */}
-                                        <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                                            <Text style={styles.inputLabel}>Color</Text>
-                                            <View style={styles.inputContainer}>
-                                                <TextInput
-                                                    style={styles.input}
-                                                    value={vehicleColor}
-                                                    onChangeText={setVehicleColor}
-                                                    placeholder="Blanco"
-                                                    placeholderTextColor={BrandColors.gray[400]}
-                                                />
-                                            </View>
-                                        </View>
-                                    </View>
-
-                                    {/* Vehicle Type */}
-                                    <View style={styles.inputGroup}>
-                                        <Text style={styles.inputLabel}>Tipo de Vehículo</Text>
-                                        <View style={styles.inputContainer}>
-                                            <TextInput
-                                                style={styles.input}
-                                                value={vehicleType}
-                                                onChangeText={setVehicleType}
-                                                placeholder="Ej: Sedan, SUV, Moto"
-                                                placeholderTextColor={BrandColors.gray[400]}
-                                            />
-                                        </View>
-                                    </View>
-                                    <View style={styles.sectionDivider} />
-                                </View>
-                            )}
-
-                            {/* Date of Birth */}
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Fecha de Nacimiento</Text>
-                                <TouchableOpacity
-                                    onPress={() => setShowDatePicker(true)}
-                                    style={styles.inputContainer}
-                                    activeOpacity={0.7}
+                        {/* Date of Birth */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Fecha de Nacimiento</Text>
+                            <TouchableOpacity
+                                onPress={() => setShowDatePicker(true)}
+                                style={styles.inputContainer}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="calendar-outline" size={20} color={BrandColors.gray[400]} />
+                                <Text
+                                    style={[
+                                        styles.input,
+                                        !dateOfBirth && styles.placeholderText,
+                                    ]}
                                 >
-                                    <Ionicons name="calendar-outline" size={20} color={BrandColors.gray[400]} />
-                                    <Text
+                                    {dateOfBirth
+                                        ? formatDateOfBirth(dateOfBirth)
+                                        : 'Selecciona tu fecha de nacimiento'
+                                    }
+                                </Text>
+                                <Ionicons name="chevron-down" size={20} color={BrandColors.gray[400]} />
+                            </TouchableOpacity>
+                            {dateOfBirth && (
+                                <Text style={styles.inputHint}>
+                                    {formatDateOfBirthLong(dateOfBirth)}
+                                </Text>
+                            )}
+                        </View>
+
+                        {/* Date Picker Modal */}
+                        {showDatePicker && (
+                            <DateTimePicker
+                                value={dateOfBirth ? new Date(dateOfBirth) : new Date()}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={handleDateChange}
+                                maximumDate={new Date()}
+                                minimumDate={new Date(1900, 0, 1)}
+                                locale="es-ES"
+                            />
+                        )}
+
+                        {/* Gender */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Género</Text>
+                            <View style={styles.genderContainer}>
+                                {genderOptions.map((option) => (
+                                    <AnimatedTouchable
+                                        key={option.value}
+                                        onPress={() => setGender(option.value as any)}
                                         style={[
-                                            styles.input,
-                                            !dateOfBirth && styles.placeholderText,
+                                            styles.genderOption,
+                                            gender === option.value && styles.genderOptionActive,
                                         ]}
                                     >
-                                        {dateOfBirth
-                                            ? formatDateOfBirth(dateOfBirth)
-                                            : 'Selecciona tu fecha de nacimiento'
-                                        }
-                                    </Text>
-                                    <Ionicons name="chevron-down" size={20} color={BrandColors.gray[400]} />
-                                </TouchableOpacity>
-                                {dateOfBirth && (
-                                    <Text style={styles.inputHint}>
-                                        {formatDateOfBirthLong(dateOfBirth)}
-                                    </Text>
-                                )}
-                            </View>
-
-                            {/* Date Picker Modal */}
-                            {showDatePicker && (
-                                <DateTimePicker
-                                    value={dateOfBirth ? new Date(dateOfBirth) : new Date()}
-                                    mode="date"
-                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                    onChange={handleDateChange}
-                                    maximumDate={new Date()}
-                                    minimumDate={new Date(1900, 0, 1)}
-                                    locale="es-ES"
-                                />
-                            )}
-
-                            {/* Gender */}
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Género</Text>
-                                <View style={styles.genderContainer}>
-                                    {genderOptions.map((option) => (
-                                        <AnimatedTouchable
-                                            key={option.value}
-                                            onPress={() => setGender(option.value as any)}
+                                        <Text
                                             style={[
-                                                styles.genderOption,
-                                                gender === option.value && styles.genderOptionActive,
+                                                styles.genderOptionText,
+                                                gender === option.value && styles.genderOptionTextActive,
                                             ]}
                                         >
-                                            <Text
-                                                style={[
-                                                    styles.genderOptionText,
-                                                    gender === option.value && styles.genderOptionTextActive,
-                                                ]}
-                                            >
-                                                {option.label}
-                                            </Text>
-                                        </AnimatedTouchable>
-                                    ))}
-                                </View>
+                                            {option.label}
+                                        </Text>
+                                    </AnimatedTouchable>
+                                ))}
                             </View>
-                        </Card>
+                        </View>
+
+                        <View style={styles.sectionDivider} />
+
+                        {/* Security Section */}
+                        <View style={styles.securitySection}>
+                            <Text style={styles.sectionTitle}>Seguridad</Text>
+                            <View style={styles.securityItem}>
+                                <View style={styles.securityItemInfo}>
+                                    <Ionicons name="finger-print-outline" size={24} color={BrandColors.primary} />
+                                    <View style={styles.securityTextContainer}>
+                                        <Text style={styles.securityItemTitle}>Autenticación Biométrica</Text>
+                                        <Text style={styles.securityItemSubtitle}>
+                                            Usa tu huella o FaceID para confirmar pagos
+                                        </Text>
+                                    </View>
+                                </View>
+                                <Switch
+                                    value={biometricsEnabled}
+                                    onValueChange={setBiometricsEnabled}
+                                    trackColor={{ false: BrandColors.gray[300], true: BrandColors.primary }}
+                                    thumbColor={Platform.OS === 'android' ? BrandColors.white : undefined}
+                                />
+                            </View>
+
+                            <TouchableOpacity
+                                style={styles.securityItem}
+                                onPress={() => Alert.alert('Próximamente', 'La función para cambiar el PIN estará disponible pronto.')}
+                            >
+                                <View style={styles.securityItemInfo}>
+                                    <Ionicons name="key-outline" size={24} color={BrandColors.primary} />
+                                    <View style={styles.securityTextContainer}>
+                                        <Text style={styles.securityItemTitle}>Cambiar PIN de seguridad</Text>
+                                        <Text style={styles.securityItemSubtitle}>
+                                            Actualiza tu código de confirmación de 6 dígitos
+                                        </Text>
+                                    </View>
+                                </View>
+                                <Ionicons name="chevron-forward" size={20} color={BrandColors.gray[400]} />
+                            </TouchableOpacity>
+                        </View>
                     </Animated.View>
 
                     {/* Action Buttons */}
@@ -844,6 +1048,40 @@ const styles = StyleSheet.create({
         color: BrandColors.primary,
         fontWeight: '600',
     },
+    securitySection: {
+        marginTop: 8,
+    },
+    securityItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 16,
+        backgroundColor: BrandColors.white,
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: BrandColors.gray[100],
+    },
+    securityItemInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    securityTextContainer: {
+        marginLeft: 16,
+        flex: 1,
+    },
+    securityItemTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: BrandColors.gray[900],
+    },
+    securityItemSubtitle: {
+        fontSize: 13,
+        color: BrandColors.gray[500],
+        marginTop: 2,
+    },
     inputContainerError: {
         borderColor: BrandColors.error,
         backgroundColor: `${BrandColors.error}05`,
@@ -911,5 +1149,19 @@ const styles = StyleSheet.create({
     row: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+    rowBetween: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    readOnlyInput: {
+        backgroundColor: BrandColors.gray[50],
+        borderColor: BrandColors.gray[100],
+    },
+    readOnlyText: {
+        fontSize: 16,
+        color: BrandColors.gray[600],
+        marginLeft: 12,
     },
 });

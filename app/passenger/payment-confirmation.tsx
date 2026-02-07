@@ -1,3 +1,4 @@
+import { SecurityVerificationModal } from '@/components/SecurityVerificationModal';
 import { BrandColors } from '@/constants/theme';
 import { useTransferFunds } from '@/hooks/useRecharge';
 import { useWalletBalance } from '@/hooks/useWallet';
@@ -14,6 +15,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
@@ -33,11 +35,11 @@ interface ConductorInfo {
 export default function PaymentConfirmationScreen() {
     const router = useRouter();
     const { user: currentUser } = useAuthStore();
-    const { qrData, userId, amount: amountParam, transportType } = useLocalSearchParams<{
+    const { qrData, userId, amount: amountParam, transportType: transportTypeParam } = useLocalSearchParams<{
         qrData?: string;
         userId?: string;
-        amount: string;
-        transportType: string
+        amount?: string;
+        transportType?: string
     }>();
 
     const { data: balanceData } = useWalletBalance();
@@ -46,10 +48,15 @@ export default function PaymentConfirmationScreen() {
     const [conductorInfo, setConductorInfo] = useState<ConductorInfo | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const amount = parseFloat(amountParam || '0');
+    const [amount, setAmount] = useState<string>(amountParam || '');
+    const [transportType, setTransportType] = useState<string>(transportTypeParam || '');
+    const [isSecurityModalVisible, setIsSecurityModalVisible] = useState(false);
+
     const balance = typeof balanceData?.balance === 'string'
         ? parseFloat(balanceData.balance)
         : (balanceData?.balance || 0);
+
+    const numericAmount = parseFloat(amount || '0');
 
     useEffect(() => {
         const loadConductorInfo = async () => {
@@ -98,7 +105,7 @@ export default function PaymentConfirmationScreen() {
         if (!conductorInfo) return;
 
         // Validar saldo suficiente
-        if (balance < amount) {
+        if (balance < numericAmount) {
             Alert.alert(
                 'Saldo Insuficiente',
                 'No tienes saldo suficiente para realizar este pago. ¿Deseas recargar tu billetera?',
@@ -113,10 +120,28 @@ export default function PaymentConfirmationScreen() {
             return;
         }
 
+        if (!amount || isNaN(numericAmount) || numericAmount <= 0) {
+            Alert.alert('Valor inválido', 'Por favor ingresa un valor válido para el pasaje.');
+            return;
+        }
+
+        if (!transportType) {
+            Alert.alert('Tipo de transporte', 'Por favor selecciona el tipo de transporte.');
+            return;
+        }
+
+        // Mostrar modal de seguridad antes de proceder
+        setIsSecurityModalVisible(true);
+    };
+
+    const proceedWithPayment = () => {
+        if (!conductorInfo) return;
+        setIsSecurityModalVisible(false);
+
         transfer(
             {
                 toUserId: conductorInfo.id,
-                amount: amount,
+                amount: numericAmount,
                 description: `Pago de transporte: ${transportType}`,
             },
             {
@@ -126,7 +151,7 @@ export default function PaymentConfirmationScreen() {
                         params: {
                             transactionId: response.transactionId,
                             reference: response.reference,
-                            amount: amount.toString(),
+                            amount: numericAmount.toString(),
                             fee: response.fee.toString(),
                             netAmount: response.netAmount.toString(),
                             conductorUsername: conductorInfo.username,
@@ -188,7 +213,7 @@ export default function PaymentConfirmationScreen() {
         );
     }
 
-    const newBalance = balance - amount;
+    const newBalance = balance - numericAmount;
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -225,11 +250,6 @@ export default function PaymentConfirmationScreen() {
                     <View style={styles.vehicleInfo}>
                         <View style={styles.infoRow}>
                             <Ionicons name="bus-outline" size={20} color={BrandColors.gray[600]} />
-                            <Text style={styles.infoLabel}>Transporte:</Text>
-                            <Text style={[styles.infoValue, { textTransform: 'capitalize' }]}>{transportType}</Text>
-                        </View>
-                        <View style={styles.infoRow}>
-                            <Ionicons name="car-outline" size={20} color={BrandColors.gray[600]} />
                             <Text style={styles.infoLabel}>Vehículo:</Text>
                             <Text style={styles.infoValue}>{conductorInfo.vehicle}</Text>
                         </View>
@@ -241,14 +261,64 @@ export default function PaymentConfirmationScreen() {
                     </View>
                 </Animated.View>
 
-                {/* Payment Amount Card */}
+                {/* Amount Selection Section */}
                 <Animated.View
                     entering={FadeInUp.delay(200).duration(600).springify()}
                     style={styles.amountCard}
                 >
                     <Text style={styles.amountLabel}>Monto a Pagar</Text>
-                    <Text style={styles.amountValue}>{formatCurrency(amount)}</Text>
+                    {!amountParam ? (
+                        <View style={styles.amountInputContainer}>
+                            <Text style={styles.currencyPrefix}>$</Text>
+                            <TextInput
+                                style={styles.amountInput}
+                                value={amount}
+                                onChangeText={(text) => setAmount(text.replace(/[^0-9]/g, ''))}
+                                placeholder="0"
+                                keyboardType="numeric"
+                                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                            />
+                        </View>
+                    ) : (
+                        <Text style={styles.amountValue}>{formatCurrency(numericAmount)}</Text>
+                    )}
                 </Animated.View>
+
+                {/* Transport Type Selection if missing */}
+                {!transportTypeParam && (
+                    <Animated.View
+                        entering={FadeInUp.delay(300).duration(600).springify()}
+                        style={styles.transportSelectionCard}
+                    >
+                        <Text style={styles.sectionTitle}>Tipo de Transporte</Text>
+                        <View style={styles.transportOptions}>
+                            {['bus', 'taxi', 'microbus', 'metro'].map((type) => (
+                                <TouchableOpacity
+                                    key={type}
+                                    style={[
+                                        styles.transportOption,
+                                        transportType === type && styles.transportOptionActive
+                                    ]}
+                                    onPress={() => setTransportType(type)}
+                                >
+                                    <View style={styles.transportOptionIcon}>
+                                        <Ionicons
+                                            name={type === 'taxi' ? 'car' : 'bus'}
+                                            size={16}
+                                            color={transportType === type ? BrandColors.primary : BrandColors.gray[500]}
+                                        />
+                                    </View>
+                                    <Text style={[
+                                        styles.transportOptionText,
+                                        transportType === type && styles.transportOptionTextActive
+                                    ]}>
+                                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </Animated.View>
+                )}
 
                 {/* Balance Info */}
                 <Animated.View
@@ -268,14 +338,14 @@ export default function PaymentConfirmationScreen() {
                 </Animated.View>
 
                 {/* Warning if low balance */}
-                {newBalance < 10000 && (
+                {newBalance < 5000 && (
                     <Animated.View
                         entering={FadeInUp.delay(600).duration(600).springify()}
                         style={styles.warningCard}
                     >
                         <Ionicons name="warning-outline" size={24} color={BrandColors.warning} />
                         <Text style={styles.warningText}>
-                            Tu saldo quedará bajo después de este pago. Considera recargar tu billetera.
+                            Tu saldo quedará muy bajo.
                         </Text>
                     </Animated.View>
                 )}
@@ -292,9 +362,9 @@ export default function PaymentConfirmationScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={[styles.confirmButton, isProcessing && styles.confirmButtonDisabled]}
+                    style={[styles.confirmButton, (isProcessing || !amount || !transportType) && styles.confirmButtonDisabled]}
                     onPress={handleConfirmPayment}
-                    disabled={isProcessing}
+                    disabled={isProcessing || !amount || !transportType}
                 >
                     {isProcessing ? (
                         <ActivityIndicator color={BrandColors.white} />
@@ -306,6 +376,14 @@ export default function PaymentConfirmationScreen() {
                     )}
                 </TouchableOpacity>
             </View>
+
+            <SecurityVerificationModal
+                visible={isSecurityModalVisible}
+                onSuccess={proceedWithPayment}
+                onCancel={() => setIsSecurityModalVisible(false)}
+                title="Confirmar Transacción"
+                subtitle={`Confirma el pago de ${formatCurrency(numericAmount)} a ${conductorInfo.name}`}
+            />
         </SafeAreaView>
     );
 }
@@ -412,7 +490,7 @@ const styles = StyleSheet.create({
     infoLabel: {
         fontSize: 14,
         color: BrandColors.gray[600],
-        marginRight: 4,
+        minWidth: 70,
     },
     infoValue: {
         fontSize: 14,
@@ -436,6 +514,25 @@ const styles = StyleSheet.create({
         fontSize: 36,
         fontWeight: 'bold',
         color: BrandColors.white,
+    },
+    amountInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    currencyPrefix: {
+        fontSize: 36,
+        fontWeight: 'bold',
+        color: BrandColors.white,
+        marginRight: 4,
+    },
+    amountInput: {
+        fontSize: 36,
+        fontWeight: 'bold',
+        color: BrandColors.white,
+        textAlign: 'center',
+        minWidth: 100,
+        padding: 0,
     },
     balanceCard: {
         backgroundColor: BrandColors.white,
@@ -474,7 +571,6 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 14,
         color: BrandColors.gray[700],
-        lineHeight: 20,
     },
     footer: {
         flexDirection: 'row',
@@ -515,5 +611,56 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: BrandColors.white,
+    },
+    transportSelectionCard: {
+        backgroundColor: BrandColors.white,
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: BrandColors.gray[800],
+        marginBottom: 12,
+    },
+    transportOptions: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    transportOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: BrandColors.gray[200],
+        backgroundColor: BrandColors.gray[50],
+    },
+    transportOptionActive: {
+        borderColor: BrandColors.primary,
+        backgroundColor: BrandColors.primary + '10',
+    },
+    transportOptionIcon: {
+        width: 24,
+        height: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    transportOptionText: {
+        fontSize: 13,
+        color: BrandColors.gray[600],
+    },
+    transportOptionTextActive: {
+        fontWeight: '600',
+        color: BrandColors.primary,
     },
 });

@@ -1,4 +1,5 @@
 import * as conductorService from '@/services/conductorService';
+import { useAuthStore } from '@/store/authStore';
 import { TransactionFilters } from '@/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -89,12 +90,18 @@ export function useRequestWithdrawal() {
  */
 export function useUpdateDriverProfile() {
     const queryClient = useQueryClient();
+    const { setUser } = useAuthStore();
 
     return useMutation({
         mutationFn: (data: any) => conductorService.updateProfile(data),
-        onSuccess: () => {
+        onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['conductor', 'profile'] });
             queryClient.invalidateQueries({ queryKey: ['user', 'profile'] });
+
+            // If the response contains the updated user, sync it to the auth store
+            if (data && (data as any).user) {
+                setUser((data as any).user);
+            }
         },
     });
 }

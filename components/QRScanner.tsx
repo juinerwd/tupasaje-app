@@ -98,46 +98,47 @@ export function QRScanner({
                     barcodeTypes: ['qr'],
                 }}
                 enableTorch={torch}
-            >
-                {/* Overlay with scanning frame */}
-                <View style={styles.overlay}>
-                    <View style={styles.overlayTop} />
-                    <View style={styles.overlayMiddle}>
-                        <View style={styles.overlaySide} />
-                        <View style={styles.scanFrame}>
-                            {/* Corner decorations */}
-                            <View style={[styles.corner, styles.cornerTopLeft]} />
-                            <View style={[styles.corner, styles.cornerTopRight]} />
-                            <View style={[styles.corner, styles.cornerBottomLeft]} />
-                            <View style={[styles.corner, styles.cornerBottomRight]} />
+            />
 
-                            {scanned && (
-                                <View style={styles.scannedIndicator}>
-                                    <Ionicons name="checkmark-circle" size={48} color={BrandColors.success} />
-                                </View>
-                            )}
-                        </View>
-                        <View style={styles.overlaySide} />
-                    </View>
-                    <View style={styles.overlayBottom}>
-                        <Text style={styles.instructionText}>
-                            Apunta al código QR del conductor
-                        </Text>
 
-                        {/* Torch toggle */}
-                        <TouchableOpacity
-                            style={styles.torchButton}
-                            onPress={() => setTorch(!torch)}
-                        >
-                            <Ionicons
-                                name={torch ? 'flash' : 'flash-off'}
-                                size={32}
-                                color={BrandColors.white}
-                            />
-                        </TouchableOpacity>
+            {/* Overlay with scanning frame - positioned on top */}
+            <View style={styles.overlay}>
+                <View style={styles.overlayTop} />
+                <View style={styles.overlayMiddle}>
+                    <View style={styles.overlaySide} />
+                    <View style={styles.scanFrame}>
+                        {/* Corner decorations */}
+                        <View style={[styles.corner, styles.cornerTopLeft]} />
+                        <View style={[styles.corner, styles.cornerTopRight]} />
+                        <View style={[styles.corner, styles.cornerBottomLeft]} />
+                        <View style={[styles.corner, styles.cornerBottomRight]} />
+
+                        {scanned && (
+                            <View style={styles.scannedIndicator}>
+                                <Ionicons name="checkmark-circle" size={48} color={BrandColors.success} />
+                            </View>
+                        )}
                     </View>
+                    <View style={styles.overlaySide} />
                 </View>
-            </CameraView>
+                <View style={styles.overlayBottom}>
+                    <Text style={styles.instructionText}>
+                        Apunta al código QR del conductor
+                    </Text>
+
+                    {/* Torch toggle */}
+                    <TouchableOpacity
+                        style={styles.torchButton}
+                        onPress={() => setTorch(!torch)}
+                    >
+                        <Ionicons
+                            name={torch ? 'flash' : 'flash-off'}
+                            size={32}
+                            color={BrandColors.white}
+                        />
+                    </TouchableOpacity>
+                </View>
+            </View>
         </View>
     );
 }
@@ -156,7 +157,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     overlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
     },
     overlayTop: {
         flex: 1,
