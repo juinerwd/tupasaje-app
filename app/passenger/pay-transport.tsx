@@ -88,8 +88,8 @@ export default function PayTransportScreen() {
         }
 
         const numericAmount = parseFloat(amount);
-        if (!amount || isNaN(numericAmount) || numericAmount <= 0) {
-            setError('Ingresa un valor válido');
+        if (!amount || isNaN(numericAmount) || numericAmount < 1000) {
+            setError('El monto mínimo de pago es $1.000');
             return;
         }
 
