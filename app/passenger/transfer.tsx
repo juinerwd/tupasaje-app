@@ -148,8 +148,8 @@ export default function TransferScreen() {
         if (!recipient) return;
 
         const numericAmount = parseFloat(amount);
-        if (isNaN(numericAmount) || numericAmount <= 0) {
-            setError('Ingresa un monto válido');
+        if (isNaN(numericAmount) || numericAmount < 1000) {
+            setError('El monto mínimo de transferencia es $1.000');
             return;
         }
 

@@ -120,8 +120,8 @@ export default function PaymentConfirmationScreen() {
             return;
         }
 
-        if (!amount || isNaN(numericAmount) || numericAmount <= 0) {
-            Alert.alert('Valor inválido', 'Por favor ingresa un valor válido para el pasaje.');
+        if (!amount || isNaN(numericAmount) || numericAmount < 1000) {
+            Alert.alert('Valor inválido', 'El monto mínimo de pago es $1.000.');
             return;
         }
 
