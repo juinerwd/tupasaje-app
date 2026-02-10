@@ -1,5 +1,7 @@
 import api from '@/lib/axios';
 import {
+    EmergencyPaymentDto,
+    EmergencyPaymentResponse,
     RechargeDto,
     RechargeResponse,
     Transaction,
@@ -75,5 +77,13 @@ export async function payTransport(qrData: string): Promise<{
     newBalance: string;
 }> {
     const response = await api.post('/payment/pay-transport', { qrCode: qrData });
+    return response.data;
+}
+
+/**
+ * Process emergency payment (for Conductors)
+ */
+export async function processEmergencyPayment(data: EmergencyPaymentDto): Promise<EmergencyPaymentResponse> {
+    const response = await api.post<EmergencyPaymentResponse>('/payments/emergency', data);
     return response.data;
 }

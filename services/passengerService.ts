@@ -74,3 +74,10 @@ export async function verifyEmergencyCode(code: string): Promise<{ valid: boolea
     });
     return response.data;
 }
+/**
+ * Cancel emergency code
+ */
+export async function cancelEmergencyCode(): Promise<{ success: boolean }> {
+    const response = await api.post<{ success: boolean }>('/passengers/cancel-emergency-code');
+    return response.data;
+}

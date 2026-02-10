@@ -1,6 +1,8 @@
 import * as conductorService from '@/services/conductorService';
+import * as paymentService from '@/services/paymentService';
 import { useAuthStore } from '@/store/authStore';
-import { TransactionFilters } from '@/types';
+import { EmergencyPaymentDto, TransactionFilters } from '@/types';
+import { getErrorMessage } from '@/utils/errorHandling';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 /**
@@ -102,6 +104,28 @@ export function useUpdateDriverProfile() {
             if (data && (data as any).user) {
                 setUser((data as any).user);
             }
+        },
+    });
+}
+
+/**
+ * Hook to process emergency payment
+ */
+export function useProcessEmergencyPayment() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (data: EmergencyPaymentDto) => {
+            try {
+                return await paymentService.processEmergencyPayment(data);
+            } catch (error: any) {
+                throw new Error(getErrorMessage(error, 'Error al procesar el pago de emergencia'));
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['conductor', 'statistics'] });
+            queryClient.invalidateQueries({ queryKey: ['conductor', 'transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['wallet', 'balance'] });
         },
     });
 }

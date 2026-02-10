@@ -106,6 +106,31 @@ export interface FavoriteLocation {
     createdAt: string;
 }
 
+// Emergency Payment
+export interface EmergencyPaymentDto {
+    passengerUsername: string;
+    emergencyCode: string;
+    amount: number;
+}
+
+export interface EmergencyPaymentResponse {
+    success: boolean;
+    transactionId: string;
+    reference: string;
+    amount: number;
+    fee: number;
+    netAmount: number;
+    status: string;
+    toUser: {
+        id: number;
+        name: string;
+    };
+    fromUser: {
+        id: number;
+        name: string;
+    };
+}
+
 // Passenger Profile
 export interface PassengerProfile {
     id: number;
@@ -135,6 +160,9 @@ export interface PassengerProfile {
     totalRatings: number;
     // Emergency
     emergencyUsedAt?: string;
+    emergencyCodeExpiresAt?: string;
+    emergencyMonth?: string;
+    emergencyMonthlyCount?: number;
     emergencyCounter: number;
     hasActiveEmergencyCode?: boolean;
     createdAt: string;
@@ -555,6 +583,8 @@ export enum PaymentMethodType {
     PSE = 'PSE',
     NEQUI = 'NEQUI',
     BANCOLOMBIA = 'BANCOLOMBIA',
+    CODE = 'CODE',
+    FICTITIOUS = 'FICTITIOUS',
 }
 
 // Request to initiate a recharge

@@ -1,6 +1,7 @@
 import * as authService from '@/services/authService';
 import { useAuthStore } from '@/store/authStore';
 import { LoginCredentials, User } from '@/types';
+import { getErrorMessage } from '@/utils/errorHandling';
 import { clearTokens } from '@/utils/secureStorage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React from 'react';
@@ -14,11 +15,17 @@ export function useLogin() {
 
     return useMutation({
         mutationFn: async (credentials: LoginCredentials) => {
-            const response = await authService.login(credentials);
-            if (!response.success || !response.data) {
-                throw new Error(response.error || 'Error al iniciar sesión');
+            try {
+                const response = await authService.login(credentials);
+                if (!response.success || !response.data) {
+                    throw new Error(response.error || 'Error al iniciar sesión');
+                }
+                return response.data;
+            } catch (error: any) {
+                // Use central handle for error message
+                const message = getErrorMessage(error, 'Error al iniciar sesión');
+                throw new Error(message);
             }
-            return response.data;
         },
         onSuccess: async (data) => {
             const { user, tokens } = data;
@@ -28,7 +35,7 @@ export function useLogin() {
             queryClient.invalidateQueries({ queryKey: ['user', 'profile'] });
         },
         onError: (error: any) => {
-            console.error('Login error:', error);
+            console.error('Login error:', error.message);
         },
         retry: false, // Disable automatic retries
     });
@@ -132,6 +139,7 @@ export function useAuth() {
         isLoggingOut: logoutMutation.isPending,
         loginError: loginMutation.error,
         logoutError: logoutMutation.error,
+        resetLogin: loginMutation.reset,
 
         // Profile
         profile: profileQuery.data,

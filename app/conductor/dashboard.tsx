@@ -1,3 +1,4 @@
+import { EmergencyPaymentModal } from '@/components/EmergencyPaymentModal';
 import { GeneratePaymentQRModal } from '@/components/GeneratePaymentQRModal';
 import { QRCodeModal } from '@/components/QRCodeModal';
 import { Card, ProgressBar, Skeleton } from '@/components/ui';
@@ -47,6 +48,7 @@ export default function ConductorDashboard() {
     const [qrPaymentVisible, setQrPaymentVisible] = useState(false);
     const [myQrVisible, setMyQrVisible] = useState(false);
     const [withdrawalVisible, setWithdrawalVisible] = useState(false);
+    const [emergencyPaymentVisible, setEmergencyPaymentVisible] = useState(false);
 
     const {
         data: stats,
@@ -328,8 +330,9 @@ export default function ConductorDashboard() {
                             { id: 'withdraw', title: 'Retirar', icon: 'cash', color: '#FF9800', action: () => handleProtectedAction(() => setWithdrawalVisible(true)) },
                             { id: 'history', title: 'Historial', icon: 'receipt', color: '#2196F3', action: () => router.push('/conductor/transactions' as any) },
                             { id: 'my-qr', title: 'Mi QR', icon: 'person', color: '#9C27B0', action: () => handleProtectedAction(() => setMyQrVisible(true)) },
+                            { id: 'emergency-payment', title: 'Cobro de Emergencia', icon: 'flash', color: '#E91E63', action: () => handleProtectedAction(() => setEmergencyPaymentVisible(true)) },
                             { id: 'support', title: 'Soporte', icon: 'help-buoy', color: '#607D8B', action: () => router.push('/conductor/help' as any) },
-                            { id: 'emergency', title: 'Emergencia', icon: 'alert-circle', color: '#F44336', action: handleEmergency },
+                            // { id: 'emergency', title: 'Emergencia', icon: 'alert-circle', color: '#F44336', action: handleEmergency },
                         ].map((action, index) => (
                             <ButtonAction
                                 key={action.id}
@@ -534,6 +537,11 @@ export default function ConductorDashboard() {
                 onClose={() => setWithdrawalVisible(false)}
                 availableBalance={stats?.availableBalance || 0}
                 navigationRouter={() => router.push('/conductor/withdrawal-methods')}
+            />
+
+            <EmergencyPaymentModal
+                visible={emergencyPaymentVisible}
+                onClose={() => setEmergencyPaymentVisible(false)}
             />
         </SafeAreaView>
     );

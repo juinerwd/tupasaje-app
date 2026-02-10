@@ -1,6 +1,4 @@
 import { QRCodeModal } from '@/components/QRCodeModal';
-import { RechargeModal } from '@/components/RechargeModal';
-import { RechargeSuccessModal } from '@/components/RechargeSuccessModal';
 import { Card, ProgressBar, Skeleton } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import { useUnreadNotificationsCount } from '@/hooks/useNotifications';
@@ -10,7 +8,7 @@ import { useClaimPromotion, usePromotions } from '@/hooks/usePromotions';
 import { useWalletTransactions } from '@/hooks/useRecharge';
 import { useWalletBalance } from '@/hooks/useWallet';
 import { useAuthStore } from '@/store/authStore';
-import { TransactionType } from '@/types';
+import { TransactionStatus, TransactionType } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -69,18 +67,26 @@ export default function PassengerDashboard() {
         const days = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
         const spending = new Array(7).fill(0);
         const now = new Date();
+        now.setHours(23, 59, 59, 999); // Set to end of today to include today's transactions
 
         transactionsData.forEach(tx => {
             const txDate = new Date(tx.createdAt);
-            const diffDays = Math.floor((now.getTime() - txDate.getTime()) / (1000 * 60 * 60 * 24));
-            if (diffDays < 7 && tx.type === TransactionType.PAYMENT) {
+            const diffTime = now.getTime() - txDate.getTime();
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+            const isDebitType = tx.type === TransactionType.PAYMENT || tx.type === TransactionType.TRANSFER;
+            const isSuccessful = tx.status === TransactionStatus.COMPLETED ||
+                (tx.status as any) === 'APPROVED' ||
+                (tx.status as any) === 'SUCCESS';
+
+            if (diffDays < 7 && isDebitType && isSuccessful) {
                 const dayIndex = txDate.getDay();
-                spending[dayIndex] += Math.abs(parseFloat(tx.amount));
+                spending[dayIndex] += Math.abs(parseFloat(tx.amount || '0'));
             }
         });
 
         // Reorder to have today as the last day
-        const todayIndex = now.getDay();
+        const todayIndex = new Date().getDay();
         const orderedSpending = [];
         for (let i = 0; i < 7; i++) {
             const index = (todayIndex - 6 + i + 7) % 7;
@@ -92,13 +98,33 @@ export default function PassengerDashboard() {
         return orderedSpending;
     }, [transactionsData]);
 
+    const stats = useMemo(() => {
+        const profileTrips = passengerProfile?.totalTrips || 0;
+        const profileSpent = passengerProfile?.totalSpent || 0;
+
+        if (!transactionsData) return { totalTrips: profileTrips, totalSpent: profileSpent };
+
+        const debitTransactions = transactionsData.filter(tx => {
+            const isDebitType = tx.type === TransactionType.PAYMENT || tx.type === TransactionType.TRANSFER;
+            const isSuccessful = tx.status === TransactionStatus.COMPLETED ||
+                (tx.status as any) === 'APPROVED' ||
+                (tx.status as any) === 'SUCCESS';
+            return isDebitType && isSuccessful;
+        });
+
+        const calculatedTrips = debitTransactions.length;
+        const calculatedSpent = debitTransactions.reduce((acc, tx) => acc + Math.abs(parseFloat(tx.amount || '0')), 0);
+
+        return {
+            totalTrips: Math.max(profileTrips, calculatedTrips),
+            totalSpent: Math.max(profileSpent, calculatedSpent)
+        };
+    }, [transactionsData, passengerProfile]);
+
     const maxSpending = useMemo(() => Math.max(...weeklySpending.map(s => s.amount), 1000), [weeklySpending]);
 
     // Modals state
     const [qrModalVisible, setQrModalVisible] = useState(false);
-    const [rechargeModalVisible, setRechargeModalVisible] = useState(false);
-    const [successModalVisible, setSuccessModalVisible] = useState(false);
-    const [lastRechargeAmount, setLastRechargeAmount] = useState(0);
 
     // Animated values
     const notificationPulse = useSharedValue(1);
@@ -169,7 +195,7 @@ export default function PassengerDashboard() {
         }
 
         if (action === 'recharge') {
-            setRechargeModalVisible(true);
+            router.push('/passenger/recharge' as any);
         } else if (action === 'pay') {
             router.push('/passenger/pay-transport');
         } else if (action === 'pay-transport') {
@@ -181,9 +207,6 @@ export default function PassengerDashboard() {
         }
     };
 
-    const handleRechargeSuccess = () => {
-        fetchDashboardData();
-    };
 
     const handlePromotionPress = (promotion: any) => {
         // Validar perfil completo para promociones que implican recarga o acciones financieras
@@ -200,7 +223,7 @@ export default function PassengerDashboard() {
         }
 
         if (promotion.actionType === 'RECHARGE') {
-            setRechargeModalVisible(true);
+            router.push('/passenger/recharge' as any);
         } else if (promotion.actionType === 'REFERRAL') {
             Alert.alert('Referir', 'Comparte tu código con un amigo para ganar pasajes gratis.');
         } else if (promotion.actionType === 'INTERNAL' && promotion.actionValue) {
@@ -386,17 +409,17 @@ export default function PassengerDashboard() {
                             style={styles.statGradient}
                         >
                             <Ionicons name="bus-outline" size={24} color={BrandColors.primary} />
-                            {isLoadingPassenger ? (
+                            {isLoadingPassenger || isLoadingTransactions ? (
                                 <Skeleton width={40} height={24} style={{ marginTop: 8, marginBottom: 4 }} />
                             ) : (
-                                <Text style={styles.statValue}>{passengerProfile?.totalTrips || 0}</Text>
+                                <Text style={styles.statValue}>{stats.totalTrips}</Text>
                             )}
                             <Text style={styles.statLabel}>Pagos</Text>
                         </LinearGradient>
                     </Animated.View>
 
                     <Animated.View
-                        entering={FadeInUp.delay(500).duration(600).springify()}
+                        entering={FadeInRight.delay(500).duration(600).springify()}
                         style={styles.statCard}
                     >
                         <LinearGradient
@@ -404,50 +427,32 @@ export default function PassengerDashboard() {
                             style={styles.statGradient}
                         >
                             <Ionicons name="wallet-outline" size={24} color={BrandColors.secondary} />
-                            {isLoadingPassenger ? (
+                            {isLoadingPassenger || isLoadingTransactions ? (
                                 <Skeleton width={60} height={24} style={{ marginTop: 8, marginBottom: 4 }} />
                             ) : (
                                 <Text style={styles.statValue}>
-                                    {formatCurrency(passengerProfile?.totalSpent || 0)}
+                                    {formatCurrency(stats.totalSpent)}
                                 </Text>
                             )}
                             <Text style={styles.statLabel}>Gastado</Text>
                         </LinearGradient>
                     </Animated.View>
-
-                    <Animated.View
-                        entering={FadeInRight.delay(600).duration(600).springify()}
-                        style={styles.statCard}
-                    >
-                        <LinearGradient
-                            colors={['#ffffff', '#f8f9fa']}
-                            style={styles.statGradient}
-                        >
-                            <Ionicons name="star-outline" size={24} color={BrandColors.warning} />
-                            {isLoadingPassenger ? (
-                                <Skeleton width={40} height={24} style={{ marginTop: 8, marginBottom: 4 }} />
-                            ) : (
-                                <Text style={styles.statValue}>
-                                    {passengerProfile?.averageRating?.toFixed(1) || '0.0'}
-                                </Text>
-                            )}
-                            <Text style={styles.statLabel}>Rating</Text>
-                        </LinearGradient>
-                    </Animated.View>
                 </View>
 
                 {/* Activity Summary */}
-                <Animated.View
+                {/* <Animated.View
                     entering={FadeInDown.delay(650).duration(600).springify()}
                     style={styles.section}
                 >
                     <Card variant="elevated" style={styles.activityCard}>
                         <View style={styles.activityHeader}>
                             <Text style={styles.activityTitle}>Resumen semanal</Text>
-                            <View style={styles.savingsBadge}>
-                                <Ionicons name="leaf" size={14} color={BrandColors.success} />
-                                <Text style={styles.savingsText}>Ahorraste {formatCurrency(12500)}</Text>
-                            </View>
+                            {stats.totalSpent > 0 && (
+                                <View style={styles.savingsBadge}>
+                                    <Ionicons name="leaf" size={14} color={BrandColors.success} />
+                                    <Text style={styles.savingsText}>Ahorraste {formatCurrency(stats.totalSpent * 0.12)}</Text>
+                                </View>
+                            )}
                         </View>
 
                         <View style={styles.chartContainer}>
@@ -466,7 +471,7 @@ export default function PassengerDashboard() {
                             ))}
                         </View>
                     </Card>
-                </Animated.View>
+                </Animated.View> */}
 
                 {/* Emergency Code Status */}
                 {!isLoadingPassenger && (
@@ -692,10 +697,15 @@ export default function PassengerDashboard() {
                                     <Ionicons name="alert-circle-outline" size={32} color={BrandColors.error} />
                                 </View>
                                 <View>
-                                    <Text style={[styles.quickActionText, { color: BrandColors.error }]}>Emergencia</Text>
-                                    {passengerProfile?.emergencyCounter && passengerProfile.emergencyCounter > 0 ? (
-                                        <Text style={styles.emergencyStatusText}>Código activo</Text>
-                                    ) : null}
+                                    <Text style={[styles.quickActionText, { color: BrandColors.error }]}>Codigo de emergencia</Text>
+                                    <View style={styles.emergencyStatusContainer}>
+                                        {passengerProfile?.hasActiveEmergencyCode && (
+                                            <View style={styles.activeDot} />
+                                        )}
+                                        <Text style={styles.emergencyStatusText}>
+                                            {passengerProfile?.emergencyMonthlyCount || 0}/3 usados
+                                        </Text>
+                                    </View>
                                 </View>
                             </LinearGradient>
                         </AnimatedTouchable>
@@ -817,18 +827,6 @@ export default function PassengerDashboard() {
                         userName={`${user.firstName} ${user.lastName}`}
                     />
                 )}
-
-                <RechargeModal
-                    visible={rechargeModalVisible}
-                    onClose={() => setRechargeModalVisible(false)}
-                    onSuccess={handleRechargeSuccess}
-                />
-
-                <RechargeSuccessModal
-                    visible={successModalVisible}
-                    amount={lastRechargeAmount}
-                    onClose={() => setSuccessModalVisible(false)}
-                />
             </ScrollView>
         </SafeAreaView>
     );
@@ -1417,5 +1415,16 @@ const styles = StyleSheet.create({
         color: BrandColors.gray[500],
         fontSize: 14,
         marginTop: 20,
+    },
+    emergencyStatusContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    activeDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: BrandColors.success,
     },
 });

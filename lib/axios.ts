@@ -55,6 +55,14 @@ api.interceptors.response.use(
         const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
         // If error is 401 and we haven't retried yet
+        // IMPORTANT: Do not attempt to refresh token if the request was to login or refresh itself
+        const isAuthRequest = originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/refresh');
+
+        if (error.response?.status === 401 && isAuthRequest) {
+            // Fail immediately for auth requests, don't even try the queue or refresh
+            return Promise.reject(error);
+        }
+
         if (error.response?.status === 401 && !originalRequest._retry) {
             if (isRefreshing) {
                 // If already refreshing, queue this request

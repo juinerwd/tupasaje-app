@@ -1,5 +1,3 @@
-import { RechargeModal } from '@/components/RechargeModal';
-import { RechargeSuccessModal } from '@/components/RechargeSuccessModal';
 import { Card } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import { useWalletTransactions } from '@/hooks/useRecharge';
@@ -27,9 +25,6 @@ const AnimatedCard = Animated.createAnimatedComponent(Card);
 export default function WalletScreen() {
     const router = useRouter();
     const [refreshing, setRefreshing] = useState(false);
-    const [showRechargeModal, setShowRechargeModal] = useState(false);
-    const [showSuccessModal, setShowSuccessModal] = useState(false);
-    const [lastRechargeAmount, setLastRechargeAmount] = useState(0);
     const [balance, setBalance] = useState<{ balance: string; currency: string } | null>(null);
 
     const { data: transactions, isLoading: isLoadingTransactions, refetch: refetchTransactions } = useWalletTransactions();
@@ -53,13 +48,6 @@ export default function WalletScreen() {
         setRefreshing(false);
     }, [fetchBalance, refetchTransactions]);
 
-    const handleRechargeSuccess = () => {
-        // This is called when the recharge is initiated
-        // In test mode, we might want to show success immediately
-        // In production, we wait for the webhook
-        fetchBalance();
-        refetchTransactions();
-    };
 
     const renderTransaction = ({ item, index }: { item: Transaction; index: number }) => {
         const isIncoming =
@@ -136,7 +124,7 @@ export default function WalletScreen() {
                 <View style={styles.headerActions}>
                     <TouchableOpacity
                         style={styles.actionButton}
-                        onPress={() => setShowRechargeModal(true)}
+                        onPress={() => router.push('/passenger/recharge')}
                     >
                         <View style={styles.actionIcon}>
                             <Ionicons name="add" size={24} color={BrandColors.primary} />
@@ -186,17 +174,6 @@ export default function WalletScreen() {
                 )}
             </View>
 
-            <RechargeModal
-                visible={showRechargeModal}
-                onClose={() => setShowRechargeModal(false)}
-                onSuccess={handleRechargeSuccess}
-            />
-
-            <RechargeSuccessModal
-                visible={showSuccessModal}
-                amount={lastRechargeAmount}
-                onClose={() => setShowSuccessModal(false)}
-            />
         </SafeAreaView>
     );
 }

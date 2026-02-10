@@ -37,9 +37,21 @@ const PAYMENT_METHODS: PaymentMethod[] = [
     },
     {
         type: PaymentMethodType.BANCOLOMBIA,
-        name: 'Bancolombia',
+        name: 'Botón Bancolombia',
         icon: 'wallet',
-        description: 'Botón Bancolombia',
+        description: 'Bancolombia',
+    },
+    {
+        type: PaymentMethodType.CODE,
+        name: 'Código',
+        icon: 'key',
+        description: 'Código de recarga',
+    },
+    {
+        type: PaymentMethodType.FICTITIOUS,
+        name: 'Prueba',
+        icon: 'flask',
+        description: 'Saldo ficticio',
     },
 ];
 

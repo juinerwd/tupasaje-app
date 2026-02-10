@@ -19,7 +19,7 @@ import {
 
 export default function LoginScreen() {
     const router = useRouter();
-    const { login, isLoggingIn, loginError } = useAuth();
+    const { login, isLoggingIn, loginError, resetLogin } = useAuth();
     const [pin, setPin] = useState('');
 
     const {
@@ -34,29 +34,26 @@ export default function LoginScreen() {
     });
 
     const onSubmit = async (data: LoginFormData) => {
-        try {
-            await login(
-                { phoneNumber: data.phoneNumber, pin },
-                {
-                    onSuccess: (result) => {
-                        // Navigate based on user role
-                        const user = result.user;
-                        if (user.role === UserRole.PASSENGER) {
-                            router.replace('/passenger/dashboard');
-                        } else if (user.role === UserRole.DRIVER) {
-                            router.replace('/conductor/dashboard');
-                        } else {
-                            router.replace('/passenger/dashboard');
-                        }
-                    },
-                    onError: (error) => {
-                        loginError(error);
-                    },
-                }
-            );
-        } catch (error) {
-            loginError(error);
-        }
+        // Reset mutation state before trying again (clears previous errors)
+        resetLogin();
+
+        login(
+            { phoneNumber: data.phoneNumber, pin },
+            {
+                onSuccess: (result) => {
+                    // Navigate based on user role
+                    const user = result.user;
+                    if (user.role === UserRole.PASSENGER) {
+                        router.replace('/passenger/dashboard');
+                    } else if (user.role === UserRole.DRIVER) {
+                        router.replace('/conductor/dashboard');
+                    } else {
+                        router.replace('/passenger/dashboard');
+                    }
+                },
+                // onError is handled by the useAuth hook automatically
+            }
+        );
     };
 
     const handleRegister = () => {

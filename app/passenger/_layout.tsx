@@ -54,7 +54,16 @@ export default function PassengerLayout() {
                     options={{
                         title: 'Historial',
                         tabBarIcon: ({ color, size }) => (
-                            <Ionicons name="list-outline" size={size} color={color} />
+                            <Ionicons name="receipt-outline" size={size} color={color} />
+                        ),
+                    }}
+                />
+                <Tabs.Screen
+                    name="wallet"
+                    options={{
+                        title: 'Billetera',
+                        tabBarIcon: ({ color, size }) => (
+                            <Ionicons name="wallet-outline" size={size} color={color} />
                         ),
                     }}
                 />
@@ -70,19 +79,13 @@ export default function PassengerLayout() {
                 <Tabs.Screen
                     name="recharge"
                     options={{
-                        title: 'Recargar',
-                        tabBarIcon: ({ color, size }) => (
-                            <Ionicons name="add-circle-outline" size={size} color={color} />
-                        ),
+                        href: null, // Ocultar de los tabs (disponible en Dashboard y Billetera)
                     }}
                 />
                 <Tabs.Screen
                     name="pay-transport"
                     options={{
-                        title: 'Pagar',
-                        tabBarIcon: ({ color, size }) => (
-                            <Ionicons name="card-outline" size={size} color={color} />
-                        ),
+                        href: null, // Ocultar de los tabs (disponible en Dashboard y Billetera)
                     }}
                 />
                 <Tabs.Screen
@@ -101,12 +104,6 @@ export default function PassengerLayout() {
                     name="payment-confirmation"
                     options={{
                         href: null, // Ocultar de los tabs
-                    }}
-                />
-                <Tabs.Screen
-                    name="wallet"
-                    options={{
-                        href: null // Ocultar de los tabs
                     }}
                 />
                 <Tabs.Screen
