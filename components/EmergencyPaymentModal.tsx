@@ -42,9 +42,14 @@ export function EmergencyPaymentModal({ visible, onClose }: EmergencyPaymentModa
             return;
         }
 
-        const amountNum = parseFloat(amount);
-        if (!amountNum || amountNum < 100) {
-            Alert.alert('Error', 'El monto mínimo es $100');
+        const amountNum = parseFloat(amount.replace(/[^0-9.]/g, ''));
+        if (isNaN(amountNum) || amountNum < 1000) {
+            Alert.alert('Error', 'Por favor ingresa un monto válido (mínimo $1,000)');
+            return;
+        }
+
+        if (amountNum > 100000) {
+            Alert.alert('Error', 'El monto máximo por cobro de emergencia es $100,000');
             return;
         }
 
