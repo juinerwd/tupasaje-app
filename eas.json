@@ -1,0 +1,30 @@
+{
+  "cli": {
+    "version": ">= 16.32.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_STAGE": "prod",
+        "EXPO_PUBLIC_API_BASE_URL": "https://tupasaje-backend-production.up.railway.app/api/v1",
+        "EXPO_PUBLIC_API_BASE_URL_ANDROID": "https://tupasaje-backend-production.up.railway.app/api/v1",
+        "EXPO_PUBLIC_INACTIVITY_TIMEOUT": "600000"
+      }
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
