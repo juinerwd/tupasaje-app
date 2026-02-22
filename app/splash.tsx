@@ -60,7 +60,7 @@ export default function SplashScreen() {
                 if (hasTokens) {
                     // User is logged in, go to appropriate dashboard
                     // We'll determine the role in the main layout
-                    router.replace('/(tabs)');
+                    router.replace('/');
                 } else if (isFirstTime) {
                     // First time user, show onboarding
                     router.replace('/onboarding');

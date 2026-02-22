@@ -1,18 +1,19 @@
 import { PaymentMethodSelector } from '@/components/PaymentMethodSelector';
-import { SecurityVerificationModal } from '@/components/SecurityVerificationModal';
 import { Button, Card, ErrorMessage } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import { useProfileCompleteness } from '@/hooks/useProfile';
-import { useFictitiousRecharge, useInitiateRecharge, useRedeemCode } from '@/hooks/useRecharge';
+import { useInitiateRecharge, useRedeemCode } from '@/hooks/useRecharge';
 import { useAuthStore } from '@/store/authStore';
 import { PaymentMethodType, RechargeRequest } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
     Alert,
+    KeyboardAvoidingView,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -34,11 +35,9 @@ export default function RechargeScreen() {
     const [amount, setAmount] = useState('');
     const [rechargeCode, setRechargeCode] = useState('');
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethodType | null>(null);
-    const [isSecurityModalVisible, setIsSecurityModalVisible] = useState(false);
     const [error, setError] = useState('');
 
     const initiateRecharge = useInitiateRecharge();
-    const fictitiousRecharge = useFictitiousRecharge();
     const redeemCode = useRedeemCode();
 
     const handleQuickAmount = (value: number) => {
@@ -68,18 +67,19 @@ export default function RechargeScreen() {
         }
 
         if (selectedPaymentMethod === PaymentMethodType.CODE) {
-            if (!rechargeCode) {
-                setError('Ingresa un código de recarga');
+            if (!rechargeCode || rechargeCode.length < 8) {
+                setError('Ingresa los 8 caracteres del código');
                 return;
             }
 
-            redeemCode.mutate(rechargeCode, {
+            const fullCode = `TP-${rechargeCode}`;
+            redeemCode.mutate(fullCode, {
                 onSuccess: (data: any) => {
                     router.replace({
                         pathname: '/shared/recharge-receipt' as any,
                         params: {
                             transactionId: data.transactionId,
-                            reference: `RC-${rechargeCode}`,
+                            reference: `RC-${fullCode}`,
                             amount: data.amount.toString(),
                             paymentMethod: 'Código de Recarga'
                         }
@@ -105,11 +105,6 @@ export default function RechargeScreen() {
 
         if (numericAmount > MAX_AMOUNT) {
             setError(`El monto máximo es ${formatCurrency(MAX_AMOUNT)}`);
-            return;
-        }
-
-        if (selectedPaymentMethod === PaymentMethodType.FICTITIOUS) {
-            setIsSecurityModalVisible(true);
             return;
         }
 
@@ -144,37 +139,14 @@ export default function RechargeScreen() {
         }
     };
 
-    const proceedWithRecharge = () => {
-        const numericAmount = parseInt(amount, 10);
-        setIsSecurityModalVisible(false);
-
-        fictitiousRecharge.mutate(
-            { amount: numericAmount },
-            {
-                onSuccess: (data: any) => {
-                    router.replace({
-                        pathname: '/shared/recharge-receipt' as any,
-                        params: {
-                            transactionId: data.transactionId,
-                            reference: data.reference,
-                            amount: amount,
-                            paymentMethod: 'Saldo Ficticio'
-                        }
-                    });
-                },
-                onError: (err: any) => {
-                    setError(err?.response?.data?.message || 'Error al realizar la recarga');
-                },
-            }
-        );
-    };
-
-    const isProcessing = initiateRecharge.isPending || fictitiousRecharge.isPending || redeemCode.isPending;
+    const isProcessing = initiateRecharge.isPending || redeemCode.isPending;
     const numericAmount = parseInt(amount, 10);
     const isValidAmount = !isNaN(numericAmount) && numericAmount >= MIN_AMOUNT && numericAmount <= MAX_AMOUNT;
 
+    const codeInputRef = useRef<TextInput>(null);
+
     const canContinue = selectedPaymentMethod === PaymentMethodType.CODE
-        ? rechargeCode.length > 5
+        ? rechargeCode.length >= 8
         : isValidAmount && !!selectedPaymentMethod;
 
     return (
@@ -188,124 +160,140 @@ export default function RechargeScreen() {
                 <View style={styles.placeholder} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.content}>
-                {/* Payment Methods */}
-                <View style={[styles.section, { marginBottom: 32 }]}>
-                    <PaymentMethodSelector
-                        selected={selectedPaymentMethod}
-                        onSelect={(method) => {
-                            setSelectedPaymentMethod(method);
-                            setError('');
-                        }}
-                    />
-                </View>
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            >
+                <ScrollView
+                    contentContainerStyle={styles.content}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    {/* Payment Methods */}
+                    <View style={[styles.section, { marginBottom: 32 }]}>
+                        <PaymentMethodSelector
+                            selected={selectedPaymentMethod}
+                            onSelect={(method) => {
+                                setSelectedPaymentMethod(method);
+                                setError('');
+                            }}
+                        />
+                    </View>
 
-                {selectedPaymentMethod === PaymentMethodType.CODE ? (
-                    /* Recharge Code Input */
-                    <Animated.View entering={FadeInDown.duration(300)}>
-                        <Card variant="elevated" style={styles.amountCard}>
-                            <Text style={styles.label}>Ingresa tu código de recarga</Text>
-                            <View style={styles.amountInputContainer}>
-                                <TextInput
-                                    style={[styles.amountInput, { fontSize: 32, textAlign: 'center' }]}
-                                    value={rechargeCode}
-                                    onChangeText={(text) => {
-                                        setRechargeCode(text.toUpperCase());
-                                        setError('');
-                                    }}
-                                    placeholder="TP-XXXXXXXX"
-                                    placeholderTextColor={BrandColors.gray[400]}
-                                    autoCapitalize="characters"
-                                    maxLength={15}
-                                />
-                            </View>
-                            <Text style={styles.infoText}>
-                                Los códigos de recarga son proporcionados por puntos autorizados.
-                            </Text>
-                        </Card>
-                    </Animated.View>
-                ) : (
-                    <>
-                        {/* Amount Input */}
-                        <Animated.View entering={FadeInDown.delay(100).springify()}>
+                    {selectedPaymentMethod === PaymentMethodType.CODE ? (
+                        /* Recharge Code Input */
+                        <Animated.View entering={FadeInDown.duration(300)}>
                             <Card variant="elevated" style={styles.amountCard}>
-                                <Text style={styles.label}>Monto a recargar</Text>
-                                <View style={styles.amountInputContainer}>
-                                    <Text style={styles.currencySymbol}>$</Text>
+                                <Text style={styles.label}>Ingresa tu código de recarga</Text>
+                                <TouchableOpacity
+                                    style={styles.amountInputContainer}
+                                    activeOpacity={1}
+                                    onPress={() => codeInputRef.current?.focus()}
+                                >
+                                    <Text style={styles.codePrefix}>TP-</Text>
                                     <TextInput
-                                        style={styles.amountInput}
-                                        value={amount}
+                                        ref={codeInputRef}
+                                        style={[styles.amountInput, { fontSize: 28, textAlign: 'center', letterSpacing: 4 }]}
+                                        value={rechargeCode}
                                         onChangeText={(text) => {
-                                            setAmount(text.replace(/[^0-9]/g, ''));
+                                            setRechargeCode(text.toUpperCase().replace(/[^A-Z0-9]/g, ''));
                                             setError('');
                                         }}
-                                        keyboardType="numeric"
-                                        placeholder="0"
+                                        placeholder="XXXXXXXX"
                                         placeholderTextColor={BrandColors.gray[400]}
-                                        maxLength={10}
+                                        autoCapitalize="characters"
+                                        maxLength={8}
+                                        autoFocus
                                     />
-                                </View>
-                                {amount && (
-                                    <Text style={styles.amountText}>
-                                        {formatCurrency(parseInt(amount) || 0)}
-                                    </Text>
-                                )}
+                                </TouchableOpacity>
+                                <Text style={styles.infoText}>
+                                    Los códigos de recarga son proporcionados por puntos autorizados.
+                                </Text>
                             </Card>
                         </Animated.View>
-
-                        {/* Quick Amounts */}
-                        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.section}>
-                            <Text style={styles.sectionTitle}>Montos rápidos</Text>
-                            <View style={styles.quickAmounts}>
-                                {QUICK_AMOUNTS.map((value) => (
-                                    <TouchableOpacity
-                                        key={value}
-                                        style={[
-                                            styles.quickAmountButton,
-                                            amount === value.toString() && styles.quickAmountButtonActive,
-                                        ]}
-                                        onPress={() => handleQuickAmount(value)}
-                                    >
-                                        <Text
-                                            style={[
-                                                styles.quickAmountText,
-                                                amount === value.toString() && styles.quickAmountTextActive,
-                                            ]}
-                                        >
-                                            {formatCurrency(value)}
+                    ) : (
+                        <>
+                            {/* Amount Input */}
+                            <Animated.View entering={FadeInDown.delay(100).springify()}>
+                                <Card variant="elevated" style={styles.amountCard}>
+                                    <Text style={styles.label}>Monto a recargar</Text>
+                                    <View style={styles.amountInputContainer}>
+                                        <Text style={styles.currencySymbol}>$</Text>
+                                        <TextInput
+                                            style={styles.amountInput}
+                                            value={amount}
+                                            onChangeText={(text) => {
+                                                setAmount(text.replace(/[^0-9]/g, ''));
+                                                setError('');
+                                            }}
+                                            keyboardType="numeric"
+                                            placeholder="0"
+                                            placeholderTextColor={BrandColors.gray[400]}
+                                            maxLength={10}
+                                        />
+                                    </View>
+                                    {amount && (
+                                        <Text style={styles.amountText}>
+                                            {formatCurrency(parseInt(amount) || 0)}
                                         </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
+                                    )}
+                                </Card>
+                            </Animated.View>
+
+                            {/* Quick Amounts */}
+                            <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.section}>
+                                <Text style={styles.sectionTitle}>Montos rápidos</Text>
+                                <View style={styles.quickAmounts}>
+                                    {QUICK_AMOUNTS.map((value) => (
+                                        <TouchableOpacity
+                                            key={value}
+                                            style={[
+                                                styles.quickAmountButton,
+                                                amount === value.toString() && styles.quickAmountButtonActive,
+                                            ]}
+                                            onPress={() => handleQuickAmount(value)}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.quickAmountText,
+                                                    amount === value.toString() && styles.quickAmountTextActive,
+                                                ]}
+                                            >
+                                                {formatCurrency(value)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </Animated.View>
+                        </>
+                    )}
+
+                    {/* Error Message */}
+                    {error && <ErrorMessage message={error} />}
+
+                    {/* Summary */}
+                    {canContinue && selectedPaymentMethod && (
+                        <Animated.View entering={FadeInDown.delay(300).springify()}>
+                            <Card variant="outlined" style={styles.summaryCard}>
+                                <View style={styles.summaryRow}>
+                                    <Text style={styles.summaryLabel}>
+                                        {selectedPaymentMethod === PaymentMethodType.CODE ? 'Código' : 'Monto a recargar'}
+                                    </Text>
+                                    <Text style={styles.summaryValue}>
+                                        {selectedPaymentMethod === PaymentMethodType.CODE ? rechargeCode : formatCurrency(parseInt(amount))}
+                                    </Text>
+                                </View>
+                                <View style={styles.summaryRow}>
+                                    <Text style={styles.summaryLabel}>Método de pago</Text>
+                                    <Text style={styles.summaryValue}>
+                                        {selectedPaymentMethod}
+                                    </Text>
+                                </View>
+                            </Card>
                         </Animated.View>
-                    </>
-                )}
-
-                {/* Error Message */}
-                {error && <ErrorMessage message={error} />}
-
-                {/* Summary */}
-                {canContinue && selectedPaymentMethod && (
-                    <Animated.View entering={FadeInDown.delay(300).springify()}>
-                        <Card variant="outlined" style={styles.summaryCard}>
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>
-                                    {selectedPaymentMethod === PaymentMethodType.CODE ? 'Código' : 'Monto a recargar'}
-                                </Text>
-                                <Text style={styles.summaryValue}>
-                                    {selectedPaymentMethod === PaymentMethodType.CODE ? rechargeCode : formatCurrency(parseInt(amount))}
-                                </Text>
-                            </View>
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Método de pago</Text>
-                                <Text style={styles.summaryValue}>
-                                    {selectedPaymentMethod}
-                                </Text>
-                            </View>
-                        </Card>
-                    </Animated.View>
-                )}
-            </ScrollView>
+                    )}
+                </ScrollView>
+            </KeyboardAvoidingView>
 
             {/* Recharge Button */}
             <View style={styles.footer}>
@@ -318,14 +306,6 @@ export default function RechargeScreen() {
                     size="large"
                 />
             </View>
-
-            <SecurityVerificationModal
-                visible={isSecurityModalVisible}
-                onSuccess={proceedWithRecharge}
-                onCancel={() => setIsSecurityModalVisible(false)}
-                title="Confirmar Recarga"
-                subtitle={`Confirma la recarga de ${formatCurrency(parseInt(amount || '0'))} (Modo Prueba)`}
-            />
         </SafeAreaView>
     );
 }
@@ -372,6 +352,13 @@ const styles = StyleSheet.create({
     amountInputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+    codePrefix: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: BrandColors.primary,
+        marginRight: 4,
+        letterSpacing: 2,
     },
     currencySymbol: {
         fontSize: 32,

@@ -108,6 +108,12 @@ export default function ConductorLayout() {
                         href: null,
                     }}
                 />
+                <Tabs.Screen
+                    name="ride-mode"
+                    options={{
+                        href: null,
+                    }}
+                />
             </Tabs>
         </View>
     );

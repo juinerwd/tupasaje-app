@@ -6,6 +6,7 @@ import { useUpdateProfile, useUserProfile } from '@/hooks/useProfile';
 import { checkUsernameAvailability, CheckUsernameResponse, updateUsername } from '@/services/usernameService';
 import { useAuthStore } from '@/store/authStore';
 import { useSettingsStore } from '@/store/settingsStore';
+import { getErrorMessage } from '@/utils/errorHandling';
 import { formatDateOfBirth, formatDateOfBirthLong } from '@/utils/formatters';
 import { vehiclePlateSchema } from '@/utils/validation';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +14,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
-import React, { useState } from 'react';
+import { SelectionModal } from '@/components/ui/SelectionModal';
+import React, { useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -32,6 +34,44 @@ import Animated, {
     FadeInUp,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+// Vehicle Selection Constants
+const VEHICLE_TYPES = [
+    { label: 'Sedán', value: 'SEDAN' },
+    { label: 'SUV', value: 'SUV' },
+    { label: 'Hatchback', value: 'HATCHBACK' },
+    { label: 'Motocicleta', value: 'MOTORCYCLE' },
+    { label: 'Van', value: 'VAN' },
+    { label: 'Camión', value: 'TRUCK' },
+    { label: 'Bicicleta', value: 'BICYCLE' },
+];
+
+const VEHICLE_COLORS = [
+    { label: 'Blanco', value: 'Blanco' },
+    { label: 'Negro', value: 'Negro' },
+    { label: 'Gris', value: 'Gris' },
+    { label: 'Plata', value: 'Plata' },
+    { label: 'Rojo', value: 'Rojo' },
+    { label: 'Azul', value: 'Azul' },
+    { label: 'Verde', value: 'Verde' },
+    { label: 'Amarillo', value: 'Amarillo' },
+    { label: 'Naranja', value: 'Naranja' },
+    { label: 'Otro', value: 'Otro' },
+];
+
+const VEHICLE_BRANDS = [
+    { label: 'Chevrolet', value: 'Chevrolet' },
+    { label: 'Renault', value: 'Renault' },
+    { label: 'Toyota', value: 'Toyota' },
+    { label: 'Kia', value: 'Kia' },
+    { label: 'Hyundai', value: 'Hyundai' },
+    { label: 'Mazda', value: 'Mazda' },
+    { label: 'Nissan', value: 'Nissan' },
+    { label: 'Ford', value: 'Ford' },
+    { label: 'Suzuki', value: 'Suzuki' },
+    { label: 'Volkswagen', value: 'Volkswagen' },
+    { label: 'Otro', value: 'Otro' },
+];
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -75,6 +115,7 @@ export default function EditProfile() {
     const [usernameAvailability, setUsernameAvailability] = useState<CheckUsernameResponse | null>(null);
     const [isCheckingUsername, setIsCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
+    const [isVehicleSet, setIsVehicleSet] = useState(false);
 
     // Initialize state from user data
     React.useEffect(() => {
@@ -108,7 +149,31 @@ export default function EditProfile() {
             setFirstName(storeUser.firstName || '');
             setLastName(storeUser.lastName || '');
         }
-    }, [queryUser, storeUser]);
+
+        // Determine if vehicle data is already set to lock it
+        if (user?.role === 'DRIVER') {
+            const driver = user.driver;
+            if (driver && driver.vehiclePlate && driver.vehicleModel) {
+                setIsVehicleSet(true);
+            }
+        }
+    }, [queryUser, storeUser, user?.role, user?.driver]);
+
+    // Select Modals state
+    const [showTypeModal, setShowTypeModal] = useState(false);
+    const [showBrandModal, setShowBrandModal] = useState(false);
+    const [showYearModal, setShowYearModal] = useState(false);
+    const [showColorModal, setShowColorModal] = useState(false);
+
+    // Generate Years Options
+    const yearOptions = useMemo(() => {
+        const currentYear = new Date().getFullYear();
+        const years = [];
+        for (let y = currentYear + 1; y >= 1990; y--) {
+            years.push({ label: y.toString(), value: y.toString() });
+        }
+        return years;
+    }, []);
 
     const genderOptions = [
         { label: 'Masculino', value: 'male' },
@@ -198,7 +263,13 @@ export default function EditProfile() {
 
         // Driver validation
         if (user?.role === 'DRIVER') {
-            if (!vehiclePlate.trim() || !vehicleModel.trim() || !vehicleYear.trim() || !vehicleColor.trim() || !vehicleType.trim()) {
+            const plate = vehiclePlate?.toString().trim() || '';
+            const model = vehicleModel?.toString().trim() || '';
+            const year = vehicleYear?.toString().trim() || '';
+            const color = vehicleColor?.toString().trim() || '';
+            const type = vehicleType?.toString().trim() || '';
+
+            if (!plate || !model || !year || !color || !type) {
                 Alert.alert(
                     'Información Incompleta',
                     'Como conductor, debes completar todos los datos de tu vehículo para poder recibir pagos.'
@@ -206,13 +277,13 @@ export default function EditProfile() {
                 return;
             }
 
-            const plateValidation = vehiclePlateSchema.safeParse(vehiclePlate.trim());
+            const plateValidation = vehiclePlateSchema.safeParse(plate);
             if (!plateValidation.success) {
                 Alert.alert('Placa Inválida', plateValidation.error.issues[0].message);
                 return;
             }
 
-            const yearNum = parseInt(vehicleYear);
+            const yearNum = parseInt(year);
             const currentYear = new Date().getFullYear();
             if (isNaN(yearNum) || yearNum < 1990 || yearNum > currentYear + 1) {
                 Alert.alert('Año Inválido', `El año del vehículo debe estar entre 1990 y ${currentYear + 1}`);
@@ -232,11 +303,17 @@ export default function EditProfile() {
         // Add driver specific data if applicable
         if (user?.role === 'DRIVER') {
             const driver = (user as any).driver || {};
-            if (vehiclePlate !== driver.vehiclePlate) updateData.vehiclePlate = vehiclePlate.trim();
-            if (vehicleModel !== driver.vehicleModel) updateData.vehicleModel = vehicleModel.trim();
-            if (vehicleYear !== driver.vehicleYear?.toString()) updateData.vehicleYear = parseInt(vehicleYear) || undefined;
-            if (vehicleColor !== driver.vehicleColor) updateData.vehicleColor = vehicleColor.trim();
-            if (vehicleType !== driver.vehicleType) updateData.vehicleType = vehicleType.trim();
+            const plate = vehiclePlate?.toString().trim() || '';
+            const model = vehicleModel?.toString().trim() || '';
+            const year = vehicleYear?.toString().trim() || '';
+            const color = vehicleColor?.toString().trim() || '';
+            const type = vehicleType?.toString().trim() || '';
+
+            if (plate !== driver.vehiclePlate) updateData.vehiclePlate = plate;
+            if (model !== driver.vehicleModel) updateData.vehicleModel = model;
+            if (year !== driver.vehicleYear?.toString()) updateData.vehicleYear = parseInt(year) || undefined;
+            if (color !== driver.vehicleColor) updateData.vehicleColor = color;
+            if (type !== driver.vehicleType) updateData.vehicleType = type;
         }
 
         // Add passenger specific data if applicable
@@ -283,8 +360,7 @@ export default function EditProfile() {
                     }]
                 );
             } catch (error: any) {
-                const errorMessage = error.response?.data?.message || 'Error al actualizar el perfil';
-                Alert.alert('Error', errorMessage);
+                Alert.alert('Error', getErrorMessage(error, 'Error al actualizar el perfil'));
             }
         };
 
@@ -605,7 +681,7 @@ export default function EditProfile() {
                                 {/* Vehicle Plate */}
                                 <View style={styles.inputGroup}>
                                     <Text style={styles.inputLabel}>Placa del Vehículo *</Text>
-                                    <View style={styles.inputContainer}>
+                                    <View style={[styles.inputContainer, isVehicleSet && styles.readOnlyInput]}>
                                         <Ionicons name="card-outline" size={20} color={BrandColors.gray[400]} />
                                         <TextInput
                                             style={styles.input}
@@ -614,69 +690,89 @@ export default function EditProfile() {
                                             placeholder="Ej: ABC-123"
                                             placeholderTextColor={BrandColors.gray[400]}
                                             autoCapitalize="characters"
+                                            editable={!isVehicleSet}
                                         />
+                                        {isVehicleSet && <Ionicons name="lock-closed" size={16} color={BrandColors.gray[400]} />}
                                     </View>
                                 </View>
 
                                 {/* Vehicle Model */}
                                 <View style={styles.inputGroup}>
                                     <Text style={styles.inputLabel}>Modelo / Marca *</Text>
-                                    <View style={styles.inputContainer}>
+                                    <TouchableOpacity
+                                        style={[styles.inputContainer, isVehicleSet && styles.readOnlyInput]}
+                                        onPress={() => !isVehicleSet && setShowBrandModal(true)}
+                                        activeOpacity={isVehicleSet ? 1 : 0.7}
+                                    >
                                         <Ionicons name="car-outline" size={20} color={BrandColors.gray[400]} />
-                                        <TextInput
-                                            style={styles.input}
-                                            value={vehicleModel}
-                                            onChangeText={setVehicleModel}
-                                            placeholder="Ej: Chevrolet Onix"
-                                            placeholderTextColor={BrandColors.gray[400]}
-                                        />
-                                    </View>
+                                        <Text style={[styles.input, !vehicleModel && styles.placeholderText]}>
+                                            {vehicleModel || 'Seleccionar marca'}
+                                        </Text>
+                                        {!isVehicleSet ? (
+                                            <Ionicons name="chevron-down" size={20} color={BrandColors.gray[400]} />
+                                        ) : (
+                                            <Ionicons name="lock-closed" size={16} color={BrandColors.gray[400]} />
+                                        )}
+                                    </TouchableOpacity>
                                 </View>
 
                                 <View style={styles.row}>
                                     {/* Vehicle Year */}
                                     <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
                                         <Text style={styles.inputLabel}>Año *</Text>
-                                        <View style={styles.inputContainer}>
-                                            <TextInput
-                                                style={styles.input}
-                                                value={vehicleYear}
-                                                onChangeText={setVehicleYear}
-                                                placeholder="2023"
-                                                placeholderTextColor={BrandColors.gray[400]}
-                                                keyboardType="numeric"
-                                                maxLength={4}
-                                            />
-                                        </View>
+                                        <TouchableOpacity
+                                            style={[styles.inputContainer, isVehicleSet && styles.readOnlyInput]}
+                                            onPress={() => !isVehicleSet && setShowYearModal(true)}
+                                            activeOpacity={isVehicleSet ? 1 : 0.7}
+                                        >
+                                            <Text style={[styles.input, !vehicleYear && styles.placeholderText]}>
+                                                {vehicleYear || 'Año'}
+                                            </Text>
+                                            {!isVehicleSet ? (
+                                                <Ionicons name="chevron-down" size={16} color={BrandColors.gray[400]} />
+                                            ) : (
+                                                <Ionicons name="lock-closed" size={14} color={BrandColors.gray[400]} />
+                                            )}
+                                        </TouchableOpacity>
                                     </View>
 
                                     {/* Vehicle Color */}
                                     <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
                                         <Text style={styles.inputLabel}>Color *</Text>
-                                        <View style={styles.inputContainer}>
-                                            <TextInput
-                                                style={styles.input}
-                                                value={vehicleColor}
-                                                onChangeText={setVehicleColor}
-                                                placeholder="Blanco"
-                                                placeholderTextColor={BrandColors.gray[400]}
-                                            />
-                                        </View>
+                                        <TouchableOpacity
+                                            style={[styles.inputContainer, isVehicleSet && styles.readOnlyInput]}
+                                            onPress={() => !isVehicleSet && setShowColorModal(true)}
+                                            activeOpacity={isVehicleSet ? 1 : 0.7}
+                                        >
+                                            <Text style={[styles.input, !vehicleColor && styles.placeholderText]}>
+                                                {vehicleColor || 'Color'}
+                                            </Text>
+                                            {!isVehicleSet ? (
+                                                <Ionicons name="chevron-down" size={16} color={BrandColors.gray[400]} />
+                                            ) : (
+                                                <Ionicons name="lock-closed" size={14} color={BrandColors.gray[400]} />
+                                            )}
+                                        </TouchableOpacity>
                                     </View>
                                 </View>
 
                                 {/* Vehicle Type */}
                                 <View style={styles.inputGroup}>
                                     <Text style={styles.inputLabel}>Tipo de Vehículo *</Text>
-                                    <View style={styles.inputContainer}>
-                                        <TextInput
-                                            style={styles.input}
-                                            value={vehicleType}
-                                            onChangeText={setVehicleType}
-                                            placeholder="Ej: Sedan, SUV, Moto"
-                                            placeholderTextColor={BrandColors.gray[400]}
-                                        />
-                                    </View>
+                                    <TouchableOpacity
+                                        style={[styles.inputContainer, isVehicleSet && styles.readOnlyInput]}
+                                        onPress={() => !isVehicleSet && setShowTypeModal(true)}
+                                        activeOpacity={isVehicleSet ? 1 : 0.7}
+                                    >
+                                        <Text style={[styles.input, !vehicleType && styles.placeholderText]}>
+                                            {vehicleType ? VEHICLE_TYPES.find(t => t.value === (vehicleType as string).toUpperCase())?.label || vehicleType : 'Seleccionar tipo'}
+                                        </Text>
+                                        {!isVehicleSet ? (
+                                            <Ionicons name="chevron-down" size={20} color={BrandColors.gray[400]} />
+                                        ) : (
+                                            <Ionicons name="lock-closed" size={16} color={BrandColors.gray[400]} />
+                                        )}
+                                    </TouchableOpacity>
                                 </View>
                                 <View style={styles.sectionDivider} />
                             </View>
@@ -867,6 +963,39 @@ export default function EditProfile() {
                             fullWidth
                         />
                     </Animated.View>
+                    {/* Vehicle Select Modals */}
+                    <SelectionModal
+                        visible={showTypeModal}
+                        onClose={() => setShowTypeModal(false)}
+                        onSelect={setVehicleType}
+                        options={VEHICLE_TYPES}
+                        title="Tipo de Vehículo"
+                        selectedValue={vehicleType}
+                    />
+                    <SelectionModal
+                        visible={showBrandModal}
+                        onClose={() => setShowBrandModal(false)}
+                        onSelect={setVehicleModel}
+                        options={VEHICLE_BRANDS}
+                        title="Marca de Vehículo"
+                        selectedValue={vehicleModel}
+                    />
+                    <SelectionModal
+                        visible={showYearModal}
+                        onClose={() => setShowYearModal(false)}
+                        onSelect={setVehicleYear}
+                        options={yearOptions}
+                        title="Año del Vehículo"
+                        selectedValue={vehicleYear}
+                    />
+                    <SelectionModal
+                        visible={showColorModal}
+                        onClose={() => setShowColorModal(false)}
+                        onSelect={setVehicleColor}
+                        options={VEHICLE_COLORS}
+                        title="Color del Vehículo"
+                        selectedValue={vehicleColor}
+                    />
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>

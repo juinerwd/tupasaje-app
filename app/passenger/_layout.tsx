@@ -160,6 +160,12 @@ export default function PassengerLayout() {
                         href: null // Ocultar de los tabs
                     }}
                 />
+                <Tabs.Screen
+                    name="request-ride"
+                    options={{
+                        href: null // Ocultar de los tabs
+                    }}
+                />
             </Tabs>
         </View>
     );

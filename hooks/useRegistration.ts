@@ -1,6 +1,6 @@
 import * as authService from '@/services/authService';
 import { useRegistrationStore } from '@/store/registrationStore';
-import { RegistrationData } from '@/types';
+import { RegistrationData, RegistrationResponse } from '@/types';
 import { useMutation } from '@tanstack/react-query';
 
 /**
@@ -48,7 +48,7 @@ let isRegistering = false;
 export function useRegister() {
     const { resetRegistration } = useRegistrationStore();
 
-    return useMutation({
+    return useMutation<RegistrationResponse, Error, RegistrationData>({
         mutationFn: async (data: RegistrationData) => {
             // Prevent duplicate calls
             if (isRegistering) {

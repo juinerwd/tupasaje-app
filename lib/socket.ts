@@ -1,12 +1,9 @@
+import { config } from '@/constants/config';
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 import { io, Socket } from 'socket.io-client';
 
-const API_URL = Platform.OS === 'android'
-    ? process.env.EXPO_PUBLIC_API_BASE_URL_ANDROID
-    : Platform.OS === 'ios'
-        ? process.env.EXPO_PUBLIC_API_BASE_URL_IOS
-        : process.env.EXPO_PUBLIC_API_BASE_URL;
+// Strip /api/v1 suffix since Socket.io connects to the root server
+const SOCKET_URL = config.apiBaseUrl.replace(/\/api\/v\d+$/, '');
 
 class SocketService {
     private socket: Socket | null = null;
@@ -23,7 +20,7 @@ class SocketService {
             return;
         }
 
-        this.socket = io(`${API_URL}/notifications`, {
+        this.socket = io(`${SOCKET_URL}/notifications`, {
             auth: {
                 token: token
             },

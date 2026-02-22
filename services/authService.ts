@@ -7,6 +7,7 @@ import {
     LoginCredentials,
     LoginResponse,
     RegistrationData,
+    RegistrationResponse,
     User,
     VerificationCodeResponse
 } from '@/types';
@@ -35,9 +36,9 @@ export async function verifyCode(phone: string, code: string): Promise<ApiRespon
 /**
  * Register new user
  */
-export async function register(data: RegistrationData): Promise<ApiResponse<{ message: string }>> {
+export async function register(data: RegistrationData): Promise<ApiResponse<RegistrationResponse>> {
     try {
-        const response = await api.post<{ message: string }>('/auth/register', data);
+        const response = await api.post<RegistrationResponse>('/auth/register', data);
         return {
             success: true,
             data: response.data,
@@ -87,16 +88,6 @@ export async function refreshToken(refreshToken: string): Promise<ApiResponse<Au
             sessionId: response.data.sessionId,
         }
     };
-}
-
-/**
- * Get current user profile
- * @deprecated Use userService.getProfile() instead
- */
-export async function getProfile(): Promise<User> {
-    // Re-export from userService for backward compatibility
-    const { getProfile: getUserProfile } = await import('./userService');
-    return getUserProfile();
 }
 
 /**

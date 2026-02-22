@@ -1,7 +1,7 @@
 import { Button, Card, ErrorMessage, LoadingSpinner } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
-import { useAuth } from '@/hooks/useAuth';
 import { useRegistration } from '@/hooks/useRegistration';
+import { useAuthStore } from '@/store/authStore';
 import { ID_TYPES, UserRole } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -32,7 +32,7 @@ export default function Step5Summary() {
         resetRegistration,
     } = useRegistration();
 
-    const { login } = useAuth();
+    const { login: loginStore } = useAuthStore();
 
     const handleConfirmRegistration = async () => {
         // Prevent double submission
@@ -48,44 +48,50 @@ export default function Step5Summary() {
             await register(registrationData, {
                 onSuccess: async (result) => {
                     try {
-                        await login(
-                            { phoneNumber: phone, pin },
-                            {
-                                onSuccess: (loginResult) => {
-                                    resetRegistration();
-                                    Alert.alert(
-                                        '¡Registro exitoso!',
-                                        'Tu cuenta ha sido creada correctamente',
-                                        [
-                                            {
-                                                text: 'Continuar',
-                                                onPress: () => {
-                                                    if (userType === UserRole.PASSENGER) {
-                                                        router.replace('/passenger/dashboard');
-                                                    } else {
-                                                        router.replace('/conductor/dashboard');
-                                                    }
-                                                },
-                                            },
-                                        ]
-                                    );
-                                },
-                                onError: (loginError) => {
-                                    resetRegistration();
-                                    Alert.alert(
-                                        'Registro exitoso',
-                                        'Por favor inicia sesión con tus credenciales',
-                                        [
-                                            {
-                                                text: 'OK',
-                                                onPress: () => router.replace('/auth/login'),
-                                            },
-                                        ]
-                                    );
-                                },
-                            }
-                        );
+                        // The backend now returns accessToken, refreshToken and user info for auto-login
+                        if (result.accessToken && result.refreshToken && result.user) {
+                            const tokens = {
+                                accessToken: result.accessToken,
+                                refreshToken: result.refreshToken,
+                                sessionId: result.sessionId,
+                            };
+
+                            await loginStore(result.user, tokens);
+
+                            resetRegistration();
+
+                            Alert.alert(
+                                '¡Registro exitoso!',
+                                'Tu cuenta ha sido creada correctamente',
+                                [
+                                    {
+                                        text: 'Continuar',
+                                        onPress: () => {
+                                            if (userType === UserRole.PASSENGER) {
+                                                router.replace('/passenger/dashboard');
+                                            } else {
+                                                router.replace('/conductor/dashboard');
+                                            }
+                                        },
+                                    },
+                                ]
+                            );
+                        } else {
+                            // Fallback if auto-login tokens are missing for some reason
+                            resetRegistration();
+                            Alert.alert(
+                                'Registro exitoso',
+                                'Por favor inicia sesión con tus credenciales',
+                                [
+                                    {
+                                        text: 'OK',
+                                        onPress: () => router.replace('/auth/login'),
+                                    },
+                                ]
+                            );
+                        }
                     } catch (loginError) {
+                        console.error('Auto-login error after registration:', loginError);
                         resetRegistration();
                         Alert.alert(
                             'Registro exitoso',

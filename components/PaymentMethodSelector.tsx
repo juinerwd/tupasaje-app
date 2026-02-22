@@ -47,12 +47,6 @@ const PAYMENT_METHODS: PaymentMethod[] = [
         icon: 'key',
         description: 'Código de recarga',
     },
-    {
-        type: PaymentMethodType.FICTITIOUS,
-        name: 'Prueba',
-        icon: 'flask',
-        description: 'Saldo ficticio',
-    },
 ];
 
 interface PaymentMethodSelectorProps {

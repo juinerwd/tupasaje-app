@@ -62,7 +62,7 @@ export function QRCodeModal({ visible, onClose, username, userName }: QRCodeModa
         }
 
         try {
-            const response = await generateQRCode('300', 'base64');
+            const response = await generateQRCode('400', 'base64');
             setQrData(response);
             // Save to cache
             await AsyncStorage.setItem(`qr_code_${username}`, JSON.stringify(response));

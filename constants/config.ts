@@ -10,7 +10,7 @@ const API_URL =
 
 
 export const config = {
-    apiBaseUrl: API_URL || 'http://localhost:3000/api',
+    apiBaseUrl: API_URL || 'http://localhost:3000/api/v1',
     inactivityTimeout: parseInt(process.env.EXPO_PUBLIC_INACTIVITY_TIMEOUT || '900000', 10), // 15 minutos por defecto
     tokenRefreshThreshold: 5 * 60 * 1000, // 5 minutos antes de expiración
     pinLength: 6,

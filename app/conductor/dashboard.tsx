@@ -326,6 +326,7 @@ export default function ConductorDashboard() {
                     <Text style={styles.sectionTitle}>Acciones rápidas</Text>
                     <View style={styles.actionsGrid}>
                         {[
+                            { id: 'taxi-mode', title: 'Modo Taxi', icon: 'car-sport', color: '#FFC107', action: () => router.push('/conductor/ride-mode' as any) },
                             { id: 'receive', title: 'Recibir Pago', icon: 'qr-code', color: '#4CAF50', action: () => handleProtectedAction(() => setQrPaymentVisible(true)) },
                             { id: 'withdraw', title: 'Retirar', icon: 'cash', color: '#FF9800', action: () => handleProtectedAction(() => setWithdrawalVisible(true)) },
                             { id: 'history', title: 'Historial', icon: 'receipt', color: '#2196F3', action: () => router.push('/conductor/transactions' as any) },

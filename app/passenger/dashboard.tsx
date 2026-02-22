@@ -204,6 +204,8 @@ export default function PassengerDashboard() {
             router.push('/passenger/transfer' as any);
         } else if (action === 'emergency') {
             router.push('/passenger/emergency-code' as any);
+        } else if (action === 'taxi') {
+            router.push('/passenger/request-ride' as any);
         }
     };
 
@@ -335,6 +337,22 @@ export default function PassengerDashboard() {
                                 </LinearGradient>
                             </View>
                             <Text style={styles.actionText}>Pagar</Text>
+                        </AnimatedTouchable>
+
+                        <AnimatedTouchable
+                            entering={FadeInUp.delay(600).duration(600).springify()}
+                            style={styles.balanceActionButton}
+                            onPress={() => handleActionPress('taxi')}
+                        >
+                            <View style={styles.actionIconContainer}>
+                                <LinearGradient
+                                    colors={['#ffffff', '#f0f0f0']}
+                                    style={styles.actionIconGradient}
+                                >
+                                    <Ionicons name="car-sport" size={28} color={BrandColors.secondary} />
+                                </LinearGradient>
+                            </View>
+                            <Text style={styles.actionText}>Taxi</Text>
                         </AnimatedTouchable>
                     </View>
 
@@ -585,6 +603,22 @@ export default function PassengerDashboard() {
                                 <Text style={styles.quickActionText}>Pagar Pasaje</Text>
                             </LinearGradient>
                         </AnimatedTouchable>
+
+                        {/* <AnimatedTouchable
+                            entering={FadeInUp.delay(730).duration(600).springify()}
+                            style={styles.quickActionCard}
+                            onPress={() => handleActionPress('recharge')}
+                        >
+                            <LinearGradient
+                                colors={['#e8f5e9', '#f1f8f4']}
+                                style={styles.quickActionGradient}
+                            >
+                                <View style={[styles.quickActionIconContainer, { backgroundColor: BrandColors.primary + '15' }]}>
+                                    <Ionicons name="gift-outline" size={32} color={BrandColors.primary} />
+                                </View>
+                                <Text style={styles.quickActionText}>Canjear Código</Text>
+                            </LinearGradient>
+                        </AnimatedTouchable> */}
 
                         <AnimatedTouchable
                             entering={FadeInUp.delay(750).duration(600).springify()}

@@ -37,8 +37,9 @@ export interface User {
     lastLoginAt?: string;
     lastActivityAt?: string;
     loginCount?: number;
-    createdAt: string;
     updatedAt: string;
+    driver?: DriverProfile;
+    passenger?: PassengerProfile;
 }
 
 // Update Profile DTO
@@ -71,6 +72,11 @@ export interface LoginResponse {
     refreshToken: string;
     sessionId: string;
     user: User;
+}
+
+// Registration response from backend
+export interface RegistrationResponse extends LoginResponse {
+    message: string;
 }
 
 // Registration data - matches backend exactly
@@ -477,13 +483,6 @@ export interface ProfileCompleteness {
     missing: string[];
 }
 
-// Balance (legacy - keeping for backward compatibility)
-export interface Balance {
-    amount: number;
-    currency: string;
-    lastUpdated: string;
-}
-
 // API Response wrapper
 export interface ApiResponse<T> {
     success: boolean;
@@ -654,11 +653,6 @@ export interface CreatePaymentMethodDto {
     bankCode?: string;
     bankName?: string;
     isDefault?: boolean;
-}
-
-export interface UpdatePaymentMethodDto {
-    isDefault?: boolean;
-    isActive?: boolean;
 }
 
 export interface UpdatePaymentMethodDto {

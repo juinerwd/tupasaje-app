@@ -15,7 +15,7 @@ import {
  * Recharge wallet with Wompi
  */
 export async function recharge(data: RechargeDto): Promise<RechargeResponse> {
-    const response = await api.post<RechargeResponse>('/payment/recharge', data);
+    const response = await api.post<RechargeResponse>('/payments/recharge', data);
     return response.data;
 }
 
@@ -23,7 +23,7 @@ export async function recharge(data: RechargeDto): Promise<RechargeResponse> {
  * Transfer money to another user
  */
 export async function transfer(data: TransferDto): Promise<TransferResponse> {
-    const response = await api.post<TransferResponse>('/payment/transfer', data);
+    const response = await api.post<TransferResponse>('/payments/transfer', data);
     return response.data;
 }
 
@@ -31,7 +31,7 @@ export async function transfer(data: TransferDto): Promise<TransferResponse> {
  * Get transaction by ID
  */
 export async function getTransactionById(id: string): Promise<Transaction> {
-    const response = await api.get<Transaction>(`/payment/transaction/${id}`);
+    const response = await api.get<Transaction>(`/payments/transaction/${id}`);
     return response.data;
 }
 
@@ -39,7 +39,7 @@ export async function getTransactionById(id: string): Promise<Transaction> {
  * Get all transactions
  */
 export async function getTransactions(filters?: TransactionFilters): Promise<Transaction[]> {
-    const response = await api.get<Transaction[]>('/payment/transactions', {
+    const response = await api.get<Transaction[]>('/payments/transactions', {
         params: filters,
     });
     return response.data;
@@ -49,7 +49,7 @@ export async function getTransactions(filters?: TransactionFilters): Promise<Tra
  * Get balance (alias of /wallet/balance)
  */
 export async function getBalance(): Promise<WalletBalance> {
-    const response = await api.get<WalletBalance>('/payment/balance');
+    const response = await api.get<WalletBalance>('/payments/balance');
     return response.data;
 }
 
@@ -64,7 +64,7 @@ export async function getConductorInfo(qrData: string): Promise<{
     rating: number;
     amount: number;
 }> {
-    const response = await api.post('/payment/qr-info', { qrCode: qrData });
+    const response = await api.post('/payments/qr-info', { qrCode: qrData });
     return response.data;
 }
 
@@ -76,7 +76,7 @@ export async function payTransport(qrData: string): Promise<{
     transaction: Transaction;
     newBalance: string;
 }> {
-    const response = await api.post('/payment/pay-transport', { qrCode: qrData });
+    const response = await api.post('/payments/pay-transport', { qrCode: qrData });
     return response.data;
 }
 

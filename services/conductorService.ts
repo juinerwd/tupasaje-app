@@ -1,5 +1,5 @@
 import api from '@/lib/axios';
-import { CreateWithdrawalMethodDto, DriverProfile, DriverRidesResponse, DriverStatistics, Transaction, TransactionFilters, UpdateWithdrawalMethodDto, WithdrawalMethod } from '@/types';
+import { CreateWithdrawalMethodDto, DriverProfile, DriverRidesResponse, DriverStatistics, Transaction, TransactionFilters, UpdateDriverProfileDto, UpdateWithdrawalMethodDto, WithdrawalMethod } from '@/types';
 
 /**
  * Get driver profile
@@ -22,7 +22,7 @@ export async function updateStatus(isAvailable: boolean): Promise<DriverProfile>
 /**
  * Update driver profile (vehicle info)
  */
-export async function updateProfile(data: any): Promise<DriverProfile> {
+export async function updateProfile(data: UpdateDriverProfileDto): Promise<DriverProfile> {
     const response = await api.patch<DriverProfile>('/drivers/profile', data);
     return response.data;
 }
