@@ -211,8 +211,8 @@ export default function PassengerProfile() {
                             colors={['#ffffff', '#f8f9fa']}
                             style={styles.statGradient}
                         >
-                            <Ionicons name="calendar-outline" size={24} color={BrandColors.primary} />
-                            <Text style={styles.statValue}>{user?.loginCount || 0}</Text>
+                            <Ionicons name="bus-outline" size={24} color={BrandColors.primary} />
+                            <Text style={styles.statValue}>{passengerProfile?.totalTrips || 0}</Text>
                             <Text style={styles.statLabel}>Viajes</Text>
                         </LinearGradient>
                     </Animated.View>

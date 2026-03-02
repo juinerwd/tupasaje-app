@@ -44,6 +44,7 @@ type ScreenState =
     | 'LOADING_LOCATION'
     | 'MAP_BROWSE'           // Browsing map, seeing drivers
     | 'DRIVER_SELECTED'      // Tapped a driver, showing info
+    | 'BROADCAST_DEST'       // Entering destination for broadcast request
     | 'WAITING_FOR_DRIVER'   // Request sent, waiting for accept/reject
     | 'DRIVER_ACCEPTED'      // Driver accepted, showing driver info
     | 'IN_PROGRESS'          // Ride in progress
@@ -69,6 +70,8 @@ export default function RequestRideScreen() {
     const [showDestModal, setShowDestModal] = useState(false);
     const [rating, setRating] = useState(0);
     const [ratingComment, setRatingComment] = useState('');
+    const [isBroadcast, setIsBroadcast] = useState(false);
+    const [driversNotified, setDriversNotified] = useState(0);
 
     // Hooks
     const { isConnected } = useRidesSocket();
@@ -108,10 +111,18 @@ export default function RequestRideScreen() {
     useEffect(() => {
         if (rideStatus === 'DRIVER_ACCEPTED') {
             setScreenState('DRIVER_ACCEPTED');
+            setIsBroadcast(false);
+        } else if (rideStatus === 'BROADCAST_SENT') {
+            setScreenState('WAITING_FOR_DRIVER');
+            setDriversNotified(rideData?.driversNotified || 0);
         } else if (rideStatus === 'DRIVER_REJECTED') {
-            setScreenState('MAP_BROWSE');
-            setSelectedDriver(null);
-            Alert.alert('Solicitud rechazada', rideData?.message || 'Busca otro conductor.');
+            // Only go back to browse if it was a direct request
+            if (!isBroadcast) {
+                setScreenState('MAP_BROWSE');
+                setSelectedDriver(null);
+                Alert.alert('Solicitud rechazada', rideData?.message || 'Busca otro conductor.');
+            }
+            // For broadcast, ignore individual rejections — keep waiting
         } else if (rideStatus === 'IN_PROGRESS') {
             setScreenState('IN_PROGRESS');
         } else if (rideStatus === 'COMPLETED') {
@@ -120,6 +131,7 @@ export default function RequestRideScreen() {
             setScreenState('MAP_BROWSE');
             setSelectedDriver(null);
             setCurrentRideId(null);
+            setIsBroadcast(false);
             resetStatus();
         }
     }, [rideStatus]);
@@ -182,6 +194,46 @@ export default function RequestRideScreen() {
         }
     }, [selectedDriver, userLocation, destination, originZone, destZone]);
 
+    // Broadcast ride to all drivers
+    const handleBroadcastRide = useCallback(async () => {
+        if (!userLocation) return;
+
+        if (!destination.trim()) {
+            setShowDestModal(true);
+            return;
+        }
+
+        try {
+            // Create ride request via REST (no specific driver)
+            const ride = await apiPost('/rides/request', {
+                pickupLat: userLocation.latitude,
+                pickupLng: userLocation.longitude,
+                pickupAddress: 'Mi ubicación',
+                pickupZone: originZone || undefined,
+                dropoffLat: userLocation.latitude, // Same coords — driver comes to you
+                dropoffLng: userLocation.longitude,
+                dropoffAddress: destination,
+                dropoffZone: destZone || undefined,
+                paymentMethod: 'CASH',
+                cityName: 'Popayán',
+            });
+
+            if (ride.id) {
+                setCurrentRideId(ride.id);
+                setEstimatedFare(ride.estimatedFare ? Number(ride.estimatedFare) : null);
+                setIsBroadcast(true);
+
+                // Broadcast to all available drivers via WebSocket
+                ridesSocketService.broadcastRide(ride.id);
+                setScreenState('WAITING_FOR_DRIVER');
+            } else {
+                Alert.alert('Error', ride.message || 'No se pudo crear la solicitud');
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Error al solicitar taxi');
+        }
+    }, [userLocation, destination, originZone, destZone]);
+
     // Cancel ride
     const handleCancel = useCallback(() => {
         if (currentRideId) {
@@ -190,6 +242,7 @@ export default function RequestRideScreen() {
         setScreenState('MAP_BROWSE');
         setSelectedDriver(null);
         setCurrentRideId(null);
+        setIsBroadcast(false);
         resetStatus();
     }, [currentRideId]);
 
@@ -336,10 +389,59 @@ export default function RequestRideScreen() {
                             }
                         </Text>
                         {drivers.length > 0 && (
-                            <Text style={styles.hintText}>
-                                Toca un taxi en el mapa para solicitar
-                            </Text>
+                            <>
+                                <Text style={styles.hintText}>
+                                    Toca un taxi en el mapa o envia una solicitud a todos los conductores
+                                </Text>
+                                <TouchableOpacity
+                                    style={styles.broadcastButton}
+                                    onPress={() => setScreenState('BROADCAST_DEST')}
+                                >
+                                    <Ionicons name="megaphone-outline" size={18} color="#fff" />
+                                    <Text style={styles.broadcastButtonText}>Solicitar a cualquier taxi</Text>
+                                </TouchableOpacity>
+                            </>
                         )}
+                    </View>
+                )}
+
+                {/* BROADCAST_DEST — Entering destination for broadcast */}
+                {screenState === 'BROADCAST_DEST' && (
+                    <View>
+                        <View style={styles.broadcastHeader}>
+                            <Ionicons name="megaphone" size={22} color={BrandColors.secondary} />
+                            <Text style={styles.panelTitle}>Solicitar a todos</Text>
+                        </View>
+                        <Text style={styles.panelSubtitle}>
+                            Tu solicitud se enviará a {drivers.length} conductor{drivers.length > 1 ? 'es' : ''} disponible{drivers.length > 1 ? 's' : ''}
+                        </Text>
+
+                        {/* Destination input */}
+                        <TouchableOpacity
+                            style={styles.destInput}
+                            onPress={() => setShowDestModal(true)}
+                        >
+                            <Ionicons name="location" size={18} color={BrandColors.primary} />
+                            <Text style={destination ? styles.destText : styles.destPlaceholder}>
+                                {destination || '¿A dónde vas?'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.buttonRow}>
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={() => setScreenState('MAP_BROWSE')}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancelar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.broadcastButton}
+                                onPress={handleBroadcastRide}
+                            >
+                                <Ionicons name="megaphone" size={18} color="#fff" />
+                                <Text style={styles.broadcastButtonText}>Enviar solicitud</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 )}
 
@@ -408,9 +510,14 @@ export default function RequestRideScreen() {
                 {screenState === 'WAITING_FOR_DRIVER' && (
                     <View style={styles.waitingContainer}>
                         <ActivityIndicator size="large" color={BrandColors.secondary} />
-                        <Text style={styles.waitingTitle}>Esperando respuesta...</Text>
+                        <Text style={styles.waitingTitle}>
+                            {isBroadcast ? 'Buscando conductor...' : 'Esperando respuesta...'}
+                        </Text>
                         <Text style={styles.waitingSubtitle}>
-                            El conductor decidirá si acepta tu solicitud
+                            {isBroadcast
+                                ? `Solicitud enviada a ${driversNotified} conductor${driversNotified > 1 ? 'es' : ''}. El primero en aceptar será tu conductor.`
+                                : 'El conductor decidirá si acepta tu solicitud'
+                            }
                         </Text>
                         <TouchableOpacity style={styles.cancelWaitButton} onPress={handleCancel}>
                             <Text style={styles.cancelWaitText}>Cancelar solicitud</Text>
@@ -563,8 +670,12 @@ export default function RequestRideScreen() {
                                 style={styles.requestButton}
                                 onPress={() => {
                                     setShowDestModal(false);
-                                    if (destination.trim() && screenState === 'DRIVER_SELECTED') {
-                                        handleRequestRide();
+                                    if (destination.trim()) {
+                                        if (screenState === 'DRIVER_SELECTED') {
+                                            handleRequestRide();
+                                        } else if (screenState === 'BROADCAST_DEST') {
+                                            handleBroadcastRide();
+                                        }
                                     }
                                 }}
                             >
@@ -855,5 +966,25 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         paddingVertical: 10,
         fontSize: 14,
+    },
+
+    // Broadcast
+    broadcastButton: {
+        flex: 1,
+        backgroundColor: BrandColors.secondary,
+        borderRadius: 14,
+        paddingVertical: 14,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 12,
+    },
+    broadcastButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+    broadcastHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 4,
     },
 });

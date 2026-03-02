@@ -1,3 +1,5 @@
+import { ridesSocketService } from '@/lib/ridesSocket';
+import { socketService } from '@/lib/socket';
 import { AuthTokens, User } from '@/types';
 import { clearTokens as clearSecureTokens, saveTokens } from '@/utils/secureStorage';
 import { create } from 'zustand';
@@ -75,6 +77,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         try {
             // Clear inactivity timer
             get().clearInactivityTimer();
+
+            // Disconnect sockets BEFORE clearing tokens
+            // This prevents reconnection attempts with invalid credentials
+            socketService.disconnect();
+            ridesSocketService.disconnect();
 
             // Clear tokens from secure storage
             await clearSecureTokens();

@@ -23,4 +23,5 @@ export const storageKeys = {
     firstTimeLaunch: 'first_time_launch',
     userProfile: 'user_profile',
     sessionId: 'session_id',
+    emergencyCode: 'emergency_code',
 };

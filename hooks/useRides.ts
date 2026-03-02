@@ -71,6 +71,10 @@ export function useRideEvents() {
                 setRideStatus('REQUESTED');
                 setRideData(data);
             }),
+            ridesSocketService.on('ride:broadcast_sent', (data) => {
+                setRideStatus('BROADCAST_SENT');
+                setRideData(data);
+            }),
             ridesSocketService.on('ride:incoming_request', (data) => {
                 setRideStatus('INCOMING_REQUEST');
                 setRideData(data);

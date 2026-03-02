@@ -79,7 +79,7 @@ export default function RechargeReceiptScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <ScrollView contentContainerStyle={styles.content}>
                 {/* Success Icon */}
                 <Animated.View style={[styles.successIconContainer, successIconStyle]}>

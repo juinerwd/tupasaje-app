@@ -97,6 +97,7 @@ class RidesSocketService {
             'nearby_drivers',
             'driver:availability_updated',
             'ride:request_sent',
+            'ride:broadcast_sent',
             'ride:incoming_request',
             'ride:accepted',
             'ride:driver_accepted',
@@ -168,6 +169,10 @@ class RidesSocketService {
 
     cancelRide(rideId: string, reason?: string) {
         this.socket?.emit('passenger:cancel_ride', { rideId, reason });
+    }
+
+    broadcastRide(rideId: string) {
+        this.socket?.emit('passenger:broadcast_ride', { rideId });
     }
 
     // ============================================

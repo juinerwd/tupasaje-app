@@ -1,10 +1,12 @@
+import { SecurityVerificationModal } from '@/components/SecurityVerificationModal';
 import { Button, Card } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import { useCancelEmergencyCode, useGenerateEmergencyCode, usePassengerProfile } from '@/hooks/usePassenger';
 import { EmergencyCode } from '@/types';
+import { clearEmergencyCode, getEmergencyCode, saveEmergencyCode } from '@/utils/secureStorage';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -23,8 +25,24 @@ export default function EmergencyCodeScreen() {
     const generateMutation = useGenerateEmergencyCode();
     const cancelMutation = useCancelEmergencyCode();
 
-    // We only keep the code in local state when it's just been generated
-    const [newGeneratedCode, setNewGeneratedCode] = useState<EmergencyCode | null>(null);
+    // We only keep the code in local state when it's just been generated or revealed
+    const [visibleCode, setVisibleCode] = useState<EmergencyCode | null>(null);
+    // Whether we are showing the code after auth verification (not freshly generated)
+    const [isRevealedCode, setIsRevealedCode] = useState(false);
+    // Controls the security verification modal
+    const [showSecurityModal, setShowSecurityModal] = useState(false);
+
+    // On mount, check if there's a stored code to determine if "Ver código" should be available
+    const [hasStoredCode, setHasStoredCode] = useState(false);
+
+    useEffect(() => {
+        checkStoredCode();
+    }, []);
+
+    const checkStoredCode = async () => {
+        const stored = await getEmergencyCode();
+        setHasStoredCode(!!stored);
+    };
 
     const handleGenerateCode = async () => {
         // Double check limit
@@ -35,7 +53,11 @@ export default function EmergencyCodeScreen() {
 
         try {
             const code = await generateMutation.mutateAsync();
-            setNewGeneratedCode(code);
+            setVisibleCode(code);
+            setIsRevealedCode(false);
+            // Save to secure storage for later viewing
+            await saveEmergencyCode(code.code, code.expiresAt);
+            setHasStoredCode(true);
         } catch (error: any) {
             const message = error.response?.data?.message || 'No se pudo generar el código. Inténtalo de nuevo.';
             Alert.alert('Error', message);
@@ -54,7 +76,11 @@ export default function EmergencyCodeScreen() {
                     onPress: async () => {
                         try {
                             await cancelMutation.mutateAsync();
-                            setNewGeneratedCode(null);
+                            setVisibleCode(null);
+                            setIsRevealedCode(false);
+                            // Clear from secure storage
+                            await clearEmergencyCode();
+                            setHasStoredCode(false);
                             Alert.alert('Éxito', 'Tu código ha sido invalidado.');
                         } catch (error) {
                             Alert.alert('Error', 'No se pudo invalidar el código.');
@@ -63,6 +89,29 @@ export default function EmergencyCodeScreen() {
                 }
             ]
         );
+    };
+
+    const handleRevealCode = () => {
+        setShowSecurityModal(true);
+    };
+
+    const handleSecuritySuccess = async () => {
+        setShowSecurityModal(false);
+        const stored = await getEmergencyCode();
+        if (stored) {
+            setVisibleCode({ code: stored.code, expiresAt: stored.expiresAt });
+            setIsRevealedCode(true);
+        } else {
+            Alert.alert(
+                'Código no disponible',
+                'No se encontró el código guardado. Es posible que haya sido eliminado o que se haya generado en otro dispositivo.'
+            );
+        }
+    };
+
+    const handleHideCode = () => {
+        setVisibleCode(null);
+        setIsRevealedCode(false);
     };
 
     const formatDate = (dateString?: string) => {
@@ -117,8 +166,8 @@ export default function EmergencyCodeScreen() {
                             <Text style={styles.infoText}>Máximo 3 intentos por mes (No acumulables)</Text>
                         </View>
                         <View style={styles.infoRow}>
-                            <Ionicons name="eye-off-outline" size={24} color={BrandColors.primary} />
-                            <Text style={styles.infoText}>El código solo se muestra una vez al generarlo</Text>
+                            <Ionicons name="lock-closed-outline" size={24} color={BrandColors.primary} />
+                            <Text style={styles.infoText}>Puedes ver tu código verificando tu identidad con PIN o huella</Text>
                         </View>
                         <View style={styles.infoRow}>
                             <Ionicons name="shield-checkmark-outline" size={24} color={BrandColors.primary} />
@@ -136,32 +185,45 @@ export default function EmergencyCodeScreen() {
                     </View>
                 </Animated.View>
 
-                {/* Case 1: Just generated a new code */}
-                {newGeneratedCode ? (
+                {/* Case 1: Showing a code (freshly generated OR revealed after auth) */}
+                {visibleCode ? (
                     <Animated.View entering={FadeInUp.duration(600)} style={styles.codeContainer}>
-                        <Text style={styles.codeLabel}>Tu NUEVO código es:</Text>
+                        <Text style={styles.codeLabel}>
+                            {isRevealedCode ? 'Tu código activo es:' : 'Tu NUEVO código es:'}
+                        </Text>
                         <View style={styles.codeBox}>
-                            <Text style={styles.codeText}>{newGeneratedCode.code}</Text>
+                            <Text style={styles.codeText}>{visibleCode.code}</Text>
                         </View>
                         <Text style={styles.expiryText}>
-                            Expira el: {formatDate(newGeneratedCode.expiresAt)}
+                            Expira el: {formatDate(visibleCode.expiresAt)}
                         </Text>
 
-                        <View style={styles.warningBox}>
-                            <Ionicons name="warning" size={20} color={BrandColors.warning} />
-                            <Text style={styles.warningText}>
-                                ¡ANÓTALO AHORA! Por tu seguridad, no podrás volver a verlo después de salir de esta pantalla.
-                            </Text>
-                        </View>
+                        {!isRevealedCode && (
+                            <View style={styles.warningBox}>
+                                <Ionicons name="warning" size={20} color={BrandColors.warning} />
+                                <Text style={styles.warningText}>
+                                    ¡ANÓTALO! También podrás verlo después verificando tu identidad con PIN o huella dactilar.
+                                </Text>
+                            </View>
+                        )}
 
-                        <Button
-                            title="Lo he guardado, volver"
-                            onPress={() => router.back()}
-                            fullWidth
-                        />
+                        {isRevealedCode ? (
+                            <Button
+                                title="Ocultar código"
+                                onPress={handleHideCode}
+                                variant="outline"
+                                fullWidth
+                            />
+                        ) : (
+                            <Button
+                                title="Lo he guardado, volver"
+                                onPress={() => router.back()}
+                                fullWidth
+                            />
+                        )}
                     </Animated.View>
                 ) : (
-                    /* Case 2: Has an active code but it's not the newly generated one (already viewed) */
+                    /* Case 2: Has an active code but it's hidden */
                     hasActiveCode ? (
                         <Animated.View entering={FadeInUp.duration(600)} style={styles.activeCodeState}>
                             <View style={styles.activeCodeBadge}>
@@ -173,9 +235,29 @@ export default function EmergencyCodeScreen() {
                                 Ya tienes un código de emergencia generado el cual expira el {formatDate(passengerProfile.emergencyCodeExpiresAt)}.
                             </Text>
 
-                            <Text style={styles.hiddenCodeMessage}>
-                                Por seguridad, el código no se muestra nuevamente. Si lo perdiste, puedes invalidarlo y generar uno nuevo.
-                            </Text>
+                            {/* Reveal Code Button */}
+                            {hasStoredCode && (
+                                <TouchableOpacity
+                                    style={styles.revealButton}
+                                    onPress={handleRevealCode}
+                                    activeOpacity={0.8}
+                                >
+                                    <View style={styles.revealButtonIcon}>
+                                        <Ionicons name="eye-outline" size={24} color={BrandColors.white} />
+                                    </View>
+                                    <View style={styles.revealButtonContent}>
+                                        <Text style={styles.revealButtonTitle}>Ver mi código</Text>
+                                        <Text style={styles.revealButtonSubtitle}>Verifica tu identidad con PIN o huella</Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={20} color={BrandColors.primary} />
+                                </TouchableOpacity>
+                            )}
+
+                            {!hasStoredCode && (
+                                <Text style={styles.hiddenCodeMessage}>
+                                    El código fue generado en otra sesión o dispositivo. Si lo perdiste, puedes invalidarlo y generar uno nuevo.
+                                </Text>
+                            )}
 
                             <View style={styles.actionGroup}>
                                 <Button
@@ -212,6 +294,15 @@ export default function EmergencyCodeScreen() {
                     )
                 )}
             </ScrollView>
+
+            {/* Security Verification Modal */}
+            <SecurityVerificationModal
+                visible={showSecurityModal}
+                onSuccess={handleSecuritySuccess}
+                onCancel={() => setShowSecurityModal(false)}
+                title="Verificar Identidad"
+                subtitle="Para ver tu código de emergencia, confirma tu identidad"
+            />
         </SafeAreaView>
     );
 }
@@ -283,6 +374,7 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: BrandColors.gray[700],
         fontWeight: '500',
+        flex: 1,
     },
     actionContainer: {
         marginTop: 8,
@@ -390,6 +482,39 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 22,
         marginBottom: 16,
+    },
+    revealButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+        backgroundColor: BrandColors.primary + '08',
+        borderWidth: 1.5,
+        borderColor: BrandColors.primary + '30',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 20,
+        gap: 12,
+    },
+    revealButtonIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: BrandColors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    revealButtonContent: {
+        flex: 1,
+    },
+    revealButtonTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: BrandColors.gray[900],
+        marginBottom: 2,
+    },
+    revealButtonSubtitle: {
+        fontSize: 13,
+        color: BrandColors.gray[500],
     },
     hiddenCodeMessage: {
         fontSize: 14,

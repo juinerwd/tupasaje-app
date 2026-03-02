@@ -80,3 +80,40 @@ export async function hasValidTokens(): Promise<boolean> {
         return false;
     }
 }
+
+/**
+ * Save emergency code securely (stored locally for authenticated re-viewing)
+ */
+export async function saveEmergencyCode(code: string, expiresAt: string): Promise<void> {
+    try {
+        const data = JSON.stringify({ code, expiresAt });
+        await SecureStore.setItemAsync(storageKeys.emergencyCode, data);
+    } catch (error) {
+        console.error('Error saving emergency code:', error);
+    }
+}
+
+/**
+ * Get emergency code from secure storage
+ */
+export async function getEmergencyCode(): Promise<{ code: string; expiresAt: string } | null> {
+    try {
+        const data = await SecureStore.getItemAsync(storageKeys.emergencyCode);
+        if (!data) return null;
+        return JSON.parse(data);
+    } catch (error) {
+        console.error('Error getting emergency code:', error);
+        return null;
+    }
+}
+
+/**
+ * Clear emergency code from secure storage
+ */
+export async function clearEmergencyCode(): Promise<void> {
+    try {
+        await SecureStore.deleteItemAsync(storageKeys.emergencyCode);
+    } catch (error) {
+        console.error('Error clearing emergency code:', error);
+    }
+}
