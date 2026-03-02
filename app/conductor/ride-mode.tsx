@@ -2,11 +2,12 @@ import { config } from '@/constants/config';
 import { BrandColors } from '@/constants/theme';
 import { useRideEvents, useRidesSocket } from '@/hooks/useRides';
 import { ridesSocketService } from '@/lib/ridesSocket';
+import { calculateETA, formatETA } from '@/utils/geo';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -58,6 +59,8 @@ type IncomingRequest = {
     };
     pickupAddress?: string;
     pickupZone?: string;
+    pickupLat?: number;
+    pickupLng?: number;
     dropoffAddress?: string;
     dropoffZone?: string;
     estimatedFare?: number;
@@ -73,10 +76,12 @@ export default function RideModeScreen() {
     // State
     const [screenState, setScreenState] = useState<DriverScreenState>('LOADING');
     const [isAvailable, setIsAvailable] = useState(false);
+    const [isTogglingAvailability, setIsTogglingAvailability] = useState(false);
     const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const [incomingRequest, setIncomingRequest] = useState<IncomingRequest | null>(null);
     const [currentRideId, setCurrentRideId] = useState<string | null>(null);
     const [currentPassenger, setCurrentPassenger] = useState<any>(null);
+    const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [cargoSurcharge, setCargoSurcharge] = useState('');
     const [rating, setRating] = useState(0);
     const [ratingComment, setRatingComment] = useState('');
@@ -168,22 +173,59 @@ export default function RideModeScreen() {
         locationSubscription.current = null;
     }, []);
 
-    // Toggle availability
+    // Toggle availability — wait for backend confirmation before updating UI
     const toggleAvailability = useCallback(async (value: boolean) => {
-        setIsAvailable(value);
+        if (isTogglingAvailability) return;
+        setIsTogglingAvailability(true);
 
-        if (value) {
-            // Activate ride mode
-            ridesSocketService.toggleAvailability(true, 'Popayán'); // TODO: detect city
-            await startLocationTracking();
-            setScreenState('ACTIVE_IDLE');
-        } else {
-            // Deactivate ride mode
-            ridesSocketService.toggleAvailability(false);
-            stopLocationTracking();
-            setScreenState('INACTIVE');
+        try {
+            // Create a promise that resolves on success or rejects on error
+            const result = await new Promise<boolean>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    cleanupListeners();
+                    reject(new Error('Tiempo de espera agotado. Intenta de nuevo.'));
+                }, 10000);
+
+                const onSuccess = () => {
+                    clearTimeout(timeout);
+                    cleanupListeners();
+                    resolve(true);
+                };
+
+                const onError = (data: { message: string }) => {
+                    clearTimeout(timeout);
+                    cleanupListeners();
+                    reject(new Error(data.message));
+                };
+
+                const unsubSuccess = ridesSocketService.on('driver:availability_updated', onSuccess);
+                const unsubError = ridesSocketService.on('error', onError);
+
+                const cleanupListeners = () => {
+                    unsubSuccess();
+                    unsubError();
+                };
+
+                // Send the toggle request
+                ridesSocketService.toggleAvailability(value, 'Popayán');
+            });
+
+            // Backend confirmed — now update UI
+            setIsAvailable(value);
+            if (value) {
+                await startLocationTracking();
+                setScreenState('ACTIVE_IDLE');
+            } else {
+                stopLocationTracking();
+                setScreenState('INACTIVE');
+            }
+        } catch (error: any) {
+            // Backend rejected — DON'T change the switch
+            Alert.alert('No se puede activar', error.message || 'Error al cambiar disponibilidad');
+        } finally {
+            setIsTogglingAvailability(false);
         }
-    }, [startLocationTracking, stopLocationTracking]);
+    }, [startLocationTracking, stopLocationTracking, isTogglingAvailability]);
 
     // Accept ride
     const handleAcceptRide = useCallback(() => {
@@ -193,6 +235,10 @@ export default function RideModeScreen() {
         setCurrentRideId(incomingRequest.rideId);
         setCurrentPassenger(incomingRequest.passenger);
         setRideFare(incomingRequest.estimatedFare ? Number(incomingRequest.estimatedFare) : null);
+        // Store pickup coordinates for ETA calculation
+        if (incomingRequest.pickupLat && incomingRequest.pickupLng) {
+            setPickupCoords({ lat: incomingRequest.pickupLat, lng: incomingRequest.pickupLng });
+        }
         setScreenState('RIDE_ACCEPTED');
         setIncomingRequest(null);
     }, [incomingRequest]);
@@ -240,12 +286,24 @@ export default function RideModeScreen() {
         setScreenState(isAvailable ? 'ACTIVE_IDLE' : 'INACTIVE');
         setCurrentRideId(null);
         setCurrentPassenger(null);
+        setPickupCoords(null);
         setRating(0);
         setRatingComment('');
         setCargoSurcharge('');
         setRideFare(null);
         resetStatus();
     }, [currentRideId, rating, ratingComment, isAvailable]);
+
+    // ETA calculation — updates in real-time as driver moves
+    const etaInfo = useMemo(() => {
+        if (!userLocation || !pickupCoords || screenState !== 'RIDE_ACCEPTED') return null;
+        return calculateETA(
+            userLocation.latitude,
+            userLocation.longitude,
+            pickupCoords.lat,
+            pickupCoords.lng,
+        );
+    }, [userLocation, pickupCoords, screenState]);
 
     // Loading
     if (screenState === 'LOADING' || !userLocation) {
@@ -329,12 +387,22 @@ export default function RideModeScreen() {
                             <Switch
                                 value={isAvailable}
                                 onValueChange={toggleAvailability}
+                                disabled={isTogglingAvailability}
                                 trackColor={{ false: BrandColors.gray[300], true: BrandColors.primaryLight }}
                                 thumbColor={isAvailable ? BrandColors.primary : BrandColors.gray[100]}
                             />
                         </View>
 
-                        {isAvailable && (
+                        {isTogglingAvailability && (
+                            <View style={styles.activeHint}>
+                                <ActivityIndicator size="small" color={BrandColors.warning} />
+                                <Text style={styles.activeHintText}>
+                                    Verificando disponibilidad...
+                                </Text>
+                            </View>
+                        )}
+
+                        {isAvailable && !isTogglingAvailability && (
                             <View style={styles.activeHint}>
                                 <ActivityIndicator size="small" color={BrandColors.secondary} />
                                 <Text style={styles.activeHintText}>
@@ -414,6 +482,16 @@ export default function RideModeScreen() {
                             <Ionicons name="checkmark-circle" size={20} color={BrandColors.success} />
                             <Text style={styles.statusBadgeText}>Ve a recoger al pasajero</Text>
                         </View>
+
+                        {/* ETA Badge */}
+                        {etaInfo && (
+                            <View style={styles.etaBadge}>
+                                <Ionicons name="time-outline" size={18} color={BrandColors.info} />
+                                <Text style={styles.etaText}>
+                                    {formatETA(etaInfo.etaMinutes)} • {etaInfo.distanceKm} km
+                                </Text>
+                            </View>
+                        )}
 
                         <View style={styles.passengerRow}>
                             <View style={styles.passengerAvatar}>
@@ -743,6 +821,20 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     statusBadgeText: { fontSize: 16, fontWeight: '700', color: BrandColors.gray[900] },
+
+    // ETA Badge
+    etaBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: BrandColors.info + '15',
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        marginBottom: 12,
+        alignSelf: 'flex-start',
+    },
+    etaText: { fontSize: 13, fontWeight: '600', color: BrandColors.info },
 
     // Start ride
     startRideBtn: {
