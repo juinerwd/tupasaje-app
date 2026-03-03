@@ -39,9 +39,14 @@ function RootLayoutContent() {
   const autoLogoutConfig = getAutoLogoutConfig();
   const { timeout, enabled } = configToMilliseconds(autoLogoutConfig);
 
+  // Disable inactivity logout on ride mode screens (passenger requesting or driver in ride mode)
+  const isOnRideScreen =
+    (segments[0] === 'passenger' && segments[1] === 'request-ride') ||
+    (segments[0] === 'conductor' && segments[1] === 'ride-mode');
+
   const { handleUserActivity } = useInactivityLogout({
     timeout,
-    enabled,
+    enabled: enabled && !isOnRideScreen,
     onAutoLogout: () => {
       // Solo mostrar si no estamos ya en el login
       const inAuthGroup = segments[0] === 'passenger' || segments[0] === 'conductor';

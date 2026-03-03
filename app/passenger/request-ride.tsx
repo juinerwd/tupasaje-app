@@ -73,11 +73,18 @@ export default function RequestRideScreen() {
     const [isBroadcast, setIsBroadcast] = useState(false);
     const [driversNotified, setDriversNotified] = useState(0);
 
+    // Determine if there is an active ride (to stop polling and hide markers)
+    const isRideActive = screenState === 'WAITING_FOR_DRIVER'
+        || screenState === 'DRIVER_ACCEPTED'
+        || screenState === 'IN_PROGRESS';
+
     // Hooks
     const { isConnected } = useRidesSocket();
     const { drivers, loading: driversLoading } = useNearbyDrivers(
         userLocation?.latitude ?? null,
         userLocation?.longitude ?? null,
+        5000,
+        !isRideActive, // Disable polling when ride is active
     );
     const { rideStatus, rideData, error: rideError, clearError, resetStatus } = useRideEvents();
     const driverLocation = useDriverLocation();
@@ -95,14 +102,39 @@ export default function RequestRideScreen() {
                 return;
             }
 
-            const location = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.Balanced,
-            });
+            let coords: { latitude: number; longitude: number } | null = null;
 
-            setUserLocation({
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-            });
+            try {
+                const location = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.Balanced,
+                });
+                coords = {
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                };
+            } catch (e) {
+                console.warn('No se pudo obtener la ubicación actual, intentando última conocida...');
+                try {
+                    const lastKnown = await Location.getLastKnownPositionAsync();
+                    if (lastKnown) {
+                        coords = {
+                            latitude: lastKnown.coords.latitude,
+                            longitude: lastKnown.coords.longitude,
+                        };
+                    }
+                } catch { }
+            }
+
+            if (!coords) {
+                // Default to Popayán center as fallback
+                coords = { latitude: 2.4419, longitude: -76.6061 };
+                Alert.alert(
+                    'Ubicación no disponible',
+                    'No se pudo obtener tu ubicación actual. Asegúrate de tener los servicios de ubicación activados. Se usará una ubicación aproximada.',
+                );
+            }
+
+            setUserLocation(coords);
             setScreenState('MAP_BROWSE');
         })();
     }, []);
@@ -143,8 +175,9 @@ export default function RequestRideScreen() {
         }
     }, [rideError]);
 
-    // Handle driver marker tap
+    // Handle driver marker tap — blocked during active rides
     const onDriverPress = useCallback((driver: NearbyDriver) => {
+        if (isRideActive) return; // Don't allow selecting another driver during active ride
         setSelectedDriver(driver);
         setScreenState('DRIVER_SELECTED');
         mapRef.current?.animateToRegion({
@@ -153,7 +186,7 @@ export default function RequestRideScreen() {
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
         }, 500);
-    }, []);
+    }, [isRideActive]);
 
     // Request ride
     const handleRequestRide = useCallback(async () => {
@@ -295,8 +328,8 @@ export default function RequestRideScreen() {
                 showsUserLocation
                 showsMyLocationButton={false}
             >
-                {/* Driver markers */}
-                {drivers.map((driver) => (
+                {/* Driver markers — only shown when NO active ride */}
+                {!isRideActive && drivers.map((driver) => (
                     <Marker
                         key={driver.driverId}
                         coordinate={{

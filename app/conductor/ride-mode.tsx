@@ -101,13 +101,39 @@ export default function RideModeScreen() {
                 return;
             }
 
-            const location = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.Balanced,
-            });
-            setUserLocation({
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-            });
+            let coords: { latitude: number; longitude: number } | null = null;
+
+            try {
+                const location = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.Balanced,
+                });
+                coords = {
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                };
+            } catch (e) {
+                console.warn('No se pudo obtener la ubicación actual, intentando última conocida...');
+                try {
+                    const lastKnown = await Location.getLastKnownPositionAsync();
+                    if (lastKnown) {
+                        coords = {
+                            latitude: lastKnown.coords.latitude,
+                            longitude: lastKnown.coords.longitude,
+                        };
+                    }
+                } catch { }
+            }
+
+            if (!coords) {
+                // Default to Popayán center as fallback
+                coords = { latitude: 2.4419, longitude: -76.6061 };
+                Alert.alert(
+                    'Ubicación no disponible',
+                    'No se pudo obtener tu ubicación actual. Asegúrate de tener los servicios de ubicación activados. Se usará una ubicación aproximada.',
+                );
+            }
+
+            setUserLocation(coords);
             setScreenState('INACTIVE');
         })();
 
@@ -143,7 +169,7 @@ export default function RideModeScreen() {
     }, [rideStatus]);
 
     useEffect(() => {
-        if (rideError) {
+        if (rideError && !isTogglingAvailability) {
             Alert.alert('Error', rideError);
             clearError();
         }
@@ -220,12 +246,41 @@ export default function RideModeScreen() {
                 setScreenState('INACTIVE');
             }
         } catch (error: any) {
-            // Backend rejected — DON'T change the switch
-            Alert.alert('No se puede activar', error.message || 'Error al cambiar disponibilidad');
+            const message = error.message || 'Error al cambiar disponibilidad';
+            const msgLower = message.toLowerCase();
+
+            const isProfileIncomplete = msgLower.includes('completar') ||
+                msgLower.includes('información personal') ||
+                msgLower.includes('datos del vehículo');
+
+            const isPendingVerification = msgLower.includes('verificación') ||
+                msgLower.includes('pendiente') ||
+                msgLower.includes('administrador');
+
+            if (isProfileIncomplete) {
+                Alert.alert(
+                    'Perfil incompleto',
+                    message,
+                    [
+                        { text: 'Completar perfil', onPress: () => router.push('/conductor/profile' as any) },
+                        { text: 'Cerrar', style: 'cancel' },
+                    ],
+                );
+            } else if (isPendingVerification) {
+                Alert.alert(
+                    'Verificación pendiente',
+                    message,
+                    [{ text: 'Entendido' }],
+                );
+            } else {
+                Alert.alert('No se puede activar', message);
+            }
+            // Clear any error buffered in the hook so the generic handler doesn't show a duplicate
+            clearError();
         } finally {
             setIsTogglingAvailability(false);
         }
-    }, [startLocationTracking, stopLocationTracking, isTogglingAvailability]);
+    }, [startLocationTracking, stopLocationTracking, isTogglingAvailability, clearError, router]);
 
     // Accept ride
     const handleAcceptRide = useCallback(() => {

@@ -27,11 +27,18 @@ export function useRidesSocket() {
 /**
  * Hook for passenger to get nearby drivers with auto-refresh
  */
-export function useNearbyDrivers(latitude: number | null, longitude: number | null, refreshIntervalMs = 5000) {
+export function useNearbyDrivers(latitude: number | null, longitude: number | null, refreshIntervalMs = 5000, enabled = true) {
     const [drivers, setDrivers] = useState<NearbyDriver[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
+        // When disabled (active ride), stop polling and clear drivers list
+        if (!enabled) {
+            setDrivers([]);
+            setLoading(false);
+            return;
+        }
+
         if (!latitude || !longitude) return;
 
         const unsubscribe = ridesSocketService.on('nearby_drivers', (data: NearbyDriver[]) => {
@@ -52,7 +59,7 @@ export function useNearbyDrivers(latitude: number | null, longitude: number | nu
             unsubscribe();
             clearInterval(interval);
         };
-    }, [latitude, longitude, refreshIntervalMs]);
+    }, [latitude, longitude, refreshIntervalMs, enabled]);
 
     return { drivers, loading };
 }

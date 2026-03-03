@@ -1,6 +1,8 @@
 import { config } from '@/constants/config';
-import * as SecureStore from 'expo-secure-store';
+import { getAccessToken } from '@/utils/secureStorage';
 import { io, Socket } from 'socket.io-client';
+import { refreshTokens } from './axios';
+
 
 // Strip /api/v1 suffix since Socket.io connects to the root server
 const SOCKET_URL = config.apiBaseUrl.replace(/\/api\/v\d+$/, '');
@@ -61,11 +63,12 @@ class RidesSocketService {
             return;
         }
 
-        const token = await SecureStore.getItemAsync('access_token');
+        const token = await getAccessToken();
         if (!token) {
             console.warn('RidesSocket: No token available');
             return;
         }
+
 
         this.socket = io(`${SOCKET_URL}/rides`, {
             auth: { token },
@@ -83,12 +86,23 @@ class RidesSocketService {
             console.log('RidesSocket: Disconnected -', reason);
         });
 
-        this.socket.on('connect_error', (error) => {
+        this.socket.on('connect_error', async (error) => {
             console.error('RidesSocket: Connection error:', error.message);
+
+            if (error.message.includes('jwt expired') || error.message.includes('unauthorized')) {
+                console.log('RidesSocket: Token expired, attempting refresh...');
+                const newToken = await refreshTokens();
+                if (newToken && this.socket) {
+                    // Update the auth token for the next connection attempt
+                    this.socket.auth = { token: newToken };
+                    this.socket.connect();
+                }
+            }
         });
 
+
         this.socket.on('error', (data: { message: string }) => {
-            console.error('RidesSocket: Server error:', data.message);
+            console.warn('RidesSocket: Server message:', data.message);
             this.emit('error', data);
         });
 

@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui';
+import { DEPARTMENTS, getCitiesByDepartment } from '@/constants/locations';
 import { BrandColors } from '@/constants/theme';
 import { useUpdateDriverProfile } from '@/hooks/useConductor';
 import { useUpdatePassengerProfile } from '@/hooks/usePassenger';
@@ -96,6 +97,11 @@ export default function EditProfile() {
         user?.gender as any || ''
     );
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [country, setCountry] = useState(user?.country || 'Colombia');
+    const [department, setDepartment] = useState(user?.department || '');
+    const [city, setCity] = useState(user?.city || '');
+    const [showDepartmentModal, setShowDepartmentModal] = useState(false);
+    const [showCityModal, setShowCityModal] = useState(false);
 
     // Driver specific state
     const [vehiclePlate, setVehiclePlate] = useState('');
@@ -126,6 +132,9 @@ export default function EditProfile() {
             setDateOfBirth(queryUser.dateOfBirth || '');
             setGender(queryUser.gender as any || '');
             setUsername(queryUser.username || '');
+            setCountry(queryUser.country || 'Colombia');
+            setDepartment(queryUser.department || '');
+            setCity(queryUser.city || '');
 
             // Initialize driver data if applicable
             if (queryUser.role === 'DRIVER' && (queryUser as any).driver) {
@@ -164,6 +173,27 @@ export default function EditProfile() {
     const [showBrandModal, setShowBrandModal] = useState(false);
     const [showYearModal, setShowYearModal] = useState(false);
     const [showColorModal, setShowColorModal] = useState(false);
+
+    const departmentOptions = useMemo(() => {
+        return DEPARTMENTS.map(dep => ({ label: dep, value: dep }));
+    }, []);
+
+    const cityOptions = useMemo(() => {
+        if (!department) return [];
+        return getCitiesByDepartment(department).map(c => ({ label: c, value: c }));
+    }, [department]);
+
+    // Update city when department changes
+    React.useEffect(() => {
+        if (department && user?.department !== department) {
+            // Only reset city if the department has actually changed from what we selected
+            // and it's not the initial load
+            const cities = getCitiesByDepartment(department);
+            if (city && !cities.includes(city)) {
+                setCity('');
+            }
+        }
+    }, [department]);
 
     // Generate Years Options
     const yearOptions = useMemo(() => {
@@ -239,6 +269,16 @@ export default function EditProfile() {
             return;
         }
 
+        if (!department) {
+            Alert.alert('Error', 'El departamento es obligatorio');
+            return;
+        }
+
+        if (!city) {
+            Alert.alert('Error', 'La ciudad es obligatoria');
+            return;
+        }
+
         if (bio && bio.length > 500) {
             Alert.alert('Error', 'La biografía no puede exceder 500 caracteres');
             return;
@@ -299,6 +339,9 @@ export default function EditProfile() {
         if (bio !== user?.bio) updateData.bio = bio.trim() || '';
         if (dateOfBirth !== user?.dateOfBirth) updateData.dateOfBirth = dateOfBirth || undefined;
         if (gender !== user?.gender) updateData.gender = gender || undefined;
+        if (country !== user?.country) updateData.country = country;
+        if (department !== user?.department) updateData.department = department;
+        if (city !== user?.city) updateData.city = city;
 
         // Add driver specific data if applicable
         if (user?.role === 'DRIVER') {
@@ -387,6 +430,8 @@ export default function EditProfile() {
             dateOfBirth !== user?.dateOfBirth ||
             gender !== user?.gender ||
             (!user?.username && username.trim() !== '') ||
+            department !== (user?.department || '') ||
+            city !== (user?.city || '') ||
             autoRecharge !== passenger.autoRecharge ||
             autoRechargeThreshold !== (passenger.autoRechargeThreshold?.toString() || '') ||
             autoRechargeAmount !== (passenger.autoRechargeAmount?.toString() || '');
@@ -904,6 +949,70 @@ export default function EditProfile() {
 
                         <View style={styles.sectionDivider} />
 
+                        {/* Location Section */}
+                        <Text style={styles.sectionTitle}>Ubicación</Text>
+
+                        {/* Country (Read-only for now) */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>País</Text>
+                            <View style={[styles.inputContainer, styles.readOnlyInput]}>
+                                <Ionicons name="globe-outline" size={20} color={BrandColors.gray[400]} />
+                                <Text style={styles.readOnlyText}>Colombia</Text>
+                                <View style={{ flex: 1 }} />
+                                <Ionicons name="lock-closed" size={16} color={BrandColors.gray[400]} />
+                            </View>
+                        </View>
+
+                        {/* Department Selector */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Departamento *</Text>
+                            <TouchableOpacity
+                                onPress={() => setShowDepartmentModal(true)}
+                                style={styles.inputContainer}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="map-outline" size={20} color={BrandColors.gray[400]} />
+                                <Text
+                                    style={[
+                                        styles.input,
+                                        !department && styles.placeholderText,
+                                    ]}
+                                >
+                                    {department || 'Selecciona departamento'}
+                                </Text>
+                                <Ionicons name="chevron-down" size={20} color={BrandColors.gray[400]} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* City Selector */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Ciudad *</Text>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    if (!department) {
+                                        Alert.alert('Atención', 'Primero selecciona un departamento');
+                                        return;
+                                    }
+                                    setShowCityModal(true);
+                                }}
+                                style={[styles.inputContainer, !department && styles.readOnlyInput]}
+                                activeOpacity={department ? 0.7 : 1}
+                            >
+                                <Ionicons name="business-outline" size={20} color={BrandColors.gray[400]} />
+                                <Text
+                                    style={[
+                                        styles.input,
+                                        !city && styles.placeholderText,
+                                    ]}
+                                >
+                                    {city || 'Selecciona ciudad'}
+                                </Text>
+                                <Ionicons name="chevron-down" size={20} color={BrandColors.gray[400]} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.sectionDivider} />
+
                         {/* Security Section */}
                         <View style={styles.securitySection}>
                             <Text style={styles.sectionTitle}>Seguridad</Text>
@@ -995,6 +1104,24 @@ export default function EditProfile() {
                         options={VEHICLE_COLORS}
                         title="Color del Vehículo"
                         selectedValue={vehicleColor}
+                    />
+
+                    {/* Location Modals */}
+                    <SelectionModal
+                        visible={showDepartmentModal}
+                        onClose={() => setShowDepartmentModal(false)}
+                        onSelect={setDepartment}
+                        options={departmentOptions}
+                        title="Seleccionar Departamento"
+                        selectedValue={department}
+                    />
+                    <SelectionModal
+                        visible={showCityModal}
+                        onClose={() => setShowCityModal(false)}
+                        onSelect={setCity}
+                        options={cityOptions}
+                        title="Seleccionar Ciudad"
+                        selectedValue={city}
                     />
                 </ScrollView>
             </KeyboardAvoidingView>

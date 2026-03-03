@@ -27,6 +27,9 @@ export interface User {
     bio?: string | null;
     dateOfBirth?: string | null;
     gender?: string | null;
+    country?: string | null;
+    department?: string | null;
+    city?: string | null;
     profileCompleted: boolean;
     profileCompleteness: number;
     isActive: boolean;
@@ -50,6 +53,9 @@ export interface UpdateProfileDto {
     bio?: string;
     dateOfBirth?: string;
     gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+    country?: string;
+    department?: string;
+    city?: string;
     username?: string;
 }
 
@@ -188,6 +194,9 @@ export interface UpdatePassengerProfileDto {
     dateOfBirth?: string;
     gender?: string;
     username?: string;
+    country?: string;
+    department?: string;
+    city?: string;
     avatar?: string;
 }
 
