@@ -175,6 +175,17 @@ export default function RideModeScreen() {
         }
     }, [rideError]);
 
+    // Heartbeat to keep driver visible even when stationary
+    useEffect(() => {
+        let heartbeat: any;
+        if (isAvailable && userLocation && isConnected) {
+            heartbeat = setInterval(() => {
+                ridesSocketService.updateLocation(userLocation.latitude, userLocation.longitude);
+            }, 60000); // Every 60 seconds
+        }
+        return () => clearInterval(heartbeat);
+    }, [isAvailable, userLocation, isConnected]);
+
     // Start/stop location tracking when availability changes
     const startLocationTracking = useCallback(async () => {
         locationSubscription.current = await Location.watchPositionAsync(
