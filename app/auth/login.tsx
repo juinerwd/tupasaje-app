@@ -63,7 +63,8 @@ export default function LoginScreen() {
     return (
         <KeyboardAvoidingView
             style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
         >
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
@@ -159,7 +160,7 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         paddingHorizontal: 24,
         paddingTop: 60,
-        paddingBottom: 40,
+        paddingBottom: Platform.OS === 'android' ? 100 : 40,
     },
     header: {
         alignItems: 'center',

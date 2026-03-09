@@ -1,4 +1,5 @@
-import { Button, Card, ErrorMessage, LoadingSpinner } from '@/components/ui';
+import { Button, Card, Checkbox, ErrorMessage, LegalContentModal, LoadingSpinner } from '@/components/ui';
+import { PRIVACY_POLICY, TERMS_AND_CONDITIONS } from '@/constants/legalContent';
 import { BrandColors } from '@/constants/theme';
 import { useRegistration } from '@/hooks/useRegistration';
 import { useAuthStore } from '@/store/authStore';
@@ -33,6 +34,20 @@ export default function Step5Summary() {
     } = useRegistration();
 
     const { login: loginStore } = useAuthStore();
+
+    // Legal state
+    const [acceptedLegal, setAcceptedLegal] = React.useState(false);
+    const [modalVisible, setModalVisible] = React.useState(false);
+    const [modalContent, setModalContent] = React.useState<{ title: string; content: React.ReactNode } | null>(null);
+
+    const openLegalModal = (type: 'terms' | 'privacy') => {
+        if (type === 'terms') {
+            setModalContent({ title: 'Términos y Condiciones', content: TERMS_AND_CONDITIONS });
+        } else {
+            setModalContent({ title: 'Política de Privacidad', content: PRIVACY_POLICY });
+        }
+        setModalVisible(true);
+    };
 
     const handleConfirmRegistration = async () => {
         // Prevent double submission
@@ -225,14 +240,41 @@ export default function Step5Summary() {
                     />
                 )}
 
-                {/* Terms and Conditions */}
+                {/* Terms and Conditions Checkbox */}
                 <View style={styles.termsContainer}>
-                    <Text style={styles.termsText}>
-                        Al confirmar, aceptas nuestros{' '}
-                        <Text style={styles.termsLink}>Términos y Condiciones</Text> y{' '}
-                        <Text style={styles.termsLink}>Política de Privacidad</Text>
-                    </Text>
+                    <Checkbox
+                        checked={acceptedLegal}
+                        onChange={setAcceptedLegal}
+                        label={
+                            <Text style={styles.termsText}>
+                                He leído y acepto los{' '}
+                                <Text
+                                    style={styles.termsLink}
+                                    onPress={() => openLegalModal('terms')}
+                                >
+                                    Términos y Condiciones
+                                </Text>{' '}
+                                y la{' '}
+                                <Text
+                                    style={styles.termsLink}
+                                    onPress={() => openLegalModal('privacy')}
+                                >
+                                    Política de Privacidad
+                                </Text>
+                            </Text>
+                        }
+                    />
                 </View>
+
+                {/* Legal Modal */}
+                {modalContent && (
+                    <LegalContentModal
+                        visible={modalVisible}
+                        onClose={() => setModalVisible(false)}
+                        title={modalContent.title}
+                        content={modalContent.content}
+                    />
+                )}
             </View>
 
             {/* Confirm Button */}
@@ -241,7 +283,7 @@ export default function Step5Summary() {
                     title="Confirmar registro"
                     onPress={handleConfirmRegistration}
                     loading={isRegistering}
-                    disabled={isRegistering}
+                    disabled={isRegistering || !acceptedLegal}
                     fullWidth
                     size="large"
                 />

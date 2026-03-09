@@ -1,10 +1,11 @@
 import { Button, Input } from '@/components/ui';
+import { SelectionModal } from '@/components/ui/SelectionModal';
 import { BrandColors } from '@/constants/theme';
 import { useRegistration } from '@/hooks/useRegistration';
 import { ID_TYPES } from '@/types';
 import { PersonalDataFormData, personalDataSchema } from '@/utils/validation';
+import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Picker } from '@react-native-picker/picker';
 import React from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -13,11 +14,16 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TouchableOpacity,
     View,
 } from 'react-native';
 
+// Cast ID_TYPES to mutable to satisfy SelectionModal props
+const ID_TYPE_OPTIONS = [...ID_TYPES];
+
 export default function Step3PersonalData() {
     const { personalData, setPersonalData, nextStep } = useRegistration();
+    const [isIdTypeModalVisible, setIsIdTypeModalVisible] = React.useState(false);
 
     const {
         control,
@@ -42,13 +48,14 @@ export default function Step3PersonalData() {
     return (
         <KeyboardAvoidingView
             style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
         >
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
+                automaticallyAdjustKeyboardInsets={true}
             >
                 <View style={styles.content}>
                     {/* Title */}
@@ -100,27 +107,40 @@ export default function Step3PersonalData() {
                             render={({ field: { onChange, value } }) => (
                                 <View style={styles.pickerContainer}>
                                     <Text style={styles.pickerLabel}>Tipo de identificación</Text>
-                                    <View
+                                    <TouchableOpacity
+                                        activeOpacity={0.7}
+                                        onPress={() => setIsIdTypeModalVisible(true)}
                                         style={[
                                             styles.pickerWrapper,
                                             errors.idType && styles.pickerWrapperError,
                                         ]}
                                     >
-                                        <Picker
-                                            selectedValue={value}
-                                            onValueChange={onChange}
-                                            style={styles.picker}
-                                        >
-                                            <Picker.Item label="Selecciona..." value="" />
-                                            {ID_TYPES.map((type) => (
-                                                <Picker.Item
-                                                    key={type.value}
-                                                    label={type.label}
-                                                    value={type.value}
-                                                />
-                                            ))}
-                                        </Picker>
-                                    </View>
+                                        <View style={styles.selectorContent}>
+                                            <Ionicons
+                                                name="card-outline"
+                                                size={20}
+                                                color={BrandColors.gray[400]}
+                                                style={styles.selectorIcon}
+                                            />
+                                            <Text style={[
+                                                styles.selectorText,
+                                                !value && styles.placeholderText
+                                            ]}>
+                                                {ID_TYPES.find(t => t.value === value)?.label || "Selecciona..."}
+                                            </Text>
+                                            <Ionicons name="chevron-down" size={20} color={BrandColors.gray[400]} />
+                                        </View>
+                                    </TouchableOpacity>
+
+                                    <SelectionModal
+                                        visible={isIdTypeModalVisible}
+                                        onClose={() => setIsIdTypeModalVisible(false)}
+                                        onSelect={onChange}
+                                        options={ID_TYPE_OPTIONS}
+                                        title="Tipo de identificación"
+                                        selectedValue={value}
+                                    />
+
                                     {errors.idType && (
                                         <Text style={styles.errorText}>{errors.idType.message}</Text>
                                     )}
@@ -189,7 +209,7 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         paddingHorizontal: 24,
         paddingTop: 32,
-        paddingBottom: 24,
+        paddingBottom: Platform.OS === 'android' ? 100 : 40, // More bottom padding for Android to allow scroll past keyboard
     },
     content: {
         flex: 1,
@@ -222,10 +242,27 @@ const styles = StyleSheet.create({
         borderColor: BrandColors.gray[300],
         borderRadius: 12,
         backgroundColor: BrandColors.white,
-        overflow: 'hidden',
+        paddingHorizontal: 12,
+        justifyContent: 'center',
+        height: 52,
     },
     pickerWrapperError: {
         borderColor: BrandColors.error,
+    },
+    selectorContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    selectorIcon: {
+        marginRight: 8,
+    },
+    selectorText: {
+        flex: 1,
+        fontSize: 16,
+        color: BrandColors.gray[900],
+    },
+    placeholderText: {
+        color: BrandColors.gray[400],
     },
     picker: {
         height: 50,

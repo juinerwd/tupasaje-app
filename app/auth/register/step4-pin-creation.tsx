@@ -55,7 +55,8 @@ export default function Step4PinCreation() {
     return (
         <KeyboardAvoidingView
             style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
         >
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
@@ -145,7 +146,7 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         paddingHorizontal: 24,
         paddingTop: 32,
-        paddingBottom: 24,
+        paddingBottom: Platform.OS === 'android' ? 100 : 40,
     },
     content: {
         flex: 1,

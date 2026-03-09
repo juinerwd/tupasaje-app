@@ -17,21 +17,18 @@ import {
 export default function Step2PhoneVerification() {
     const {
         phone,
-        verificationCode,
-        isPhoneVerified,
         setPhone,
         setVerificationCode,
         nextStep,
-        sendCode,
         isSendingCode,
         sendCodeError,
-        verifyCode,
         isVerifyingCode,
         verifyCodeError,
     } = useRegistration();
 
     const [codeSent, setCodeSent] = useState(false);
     const [localCode, setLocalCode] = useState('');
+    const [localVerifyError, setLocalVerifyError] = useState<string | null>(null);
 
     const {
         control,
@@ -46,14 +43,8 @@ export default function Step2PhoneVerification() {
 
     const handleSendCode = async (data: PhoneVerificationFormData) => {
         try {
+            setLocalVerifyError(null);
             setPhone(data.phone);
-
-            // TODO: Descomentar cuando el backend esté listo
-            // await sendCode(data.phone, {
-            //     onSuccess: () => {
-            //         setCodeSent(true);
-            //     },
-            // });
 
             // TEMPORAL: Simular envío de código mientras no hay backend
             setTimeout(() => {
@@ -67,6 +58,7 @@ export default function Step2PhoneVerification() {
 
     const handleVerifyCode = async () => {
         if (localCode.length !== 6) return;
+        setLocalVerifyError(null);
 
         try {
             setVerificationCode(localCode);
@@ -80,22 +72,12 @@ export default function Step2PhoneVerification() {
                     nextStep();
                 }, 300);
             } else {
-                // Código incorrecto
-                throw new Error('Código incorrecto. Usa: 123456');
+                // Código incorrecto - Seteamos el error local en lugar de lanzarlo
+                setLocalVerifyError('Código incorrecto. Usa: 123456');
             }
-
-            // TODO: Descomentar cuando el backend esté listo
-            // await verifyCode(
-            //     { phone, code: localCode },
-            //     {
-            //         onSuccess: () => {
-            //             nextStep();
-            //         },
-            //     }
-            // );
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error verifying code:', error);
-            throw error;
+            setLocalVerifyError(error.message || 'Error al verificar código');
         }
     };
 
@@ -107,7 +89,8 @@ export default function Step2PhoneVerification() {
     return (
         <KeyboardAvoidingView
             style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
         >
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
@@ -184,12 +167,13 @@ export default function Step2PhoneVerification() {
                                 secureTextEntry={false}
                             />
 
-                            {verifyCodeError && (
+                            {(verifyCodeError || localVerifyError) && (
                                 <ErrorMessage
                                     message={
-                                        verifyCodeError instanceof Error
+                                        localVerifyError ||
+                                        (verifyCodeError instanceof Error
                                             ? verifyCodeError.message
-                                            : 'Código inválido'
+                                            : 'Código inválido')
                                     }
                                 />
                             )}
@@ -226,7 +210,7 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         paddingHorizontal: 24,
         paddingTop: 32,
-        paddingBottom: 24,
+        paddingBottom: Platform.OS === 'android' ? 100 : 40,
     },
     content: {
         flex: 1,
