@@ -94,6 +94,7 @@ function RootLayoutContent() {
       // User logged out, redirect to login
       router.replace('/auth/login');
     }
+    // Removida redirección forzosa de verificación para usar banner en Dashboard
   }, [isAuthenticated, segments]);
 
   return (
@@ -108,6 +109,7 @@ function RootLayoutContent() {
             <Stack.Screen name="splash" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/verify-email" options={{ headerShown: false }} />
             <Stack.Screen name="auth/register/index" options={{ headerShown: false }} />
             <Stack.Screen
               name="passenger"
@@ -135,6 +137,13 @@ function RootLayoutContent() {
               options={{
                 headerShown: false,
                 title: 'Recibo de Pago',
+              }}
+            />
+            <Stack.Screen
+              name="shared/wompi-result"
+              options={{
+                headerShown: false,
+                title: 'Resultado del Pago',
               }}
             />
           </Stack>

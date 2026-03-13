@@ -111,7 +111,7 @@ export default function RechargeScreen() {
         // Real payment flow (Wompi)
         try {
             setError('');
-            const deepLink = Linking.createURL('/payment/success');
+            const deepLink = Linking.createURL('/shared/wompi-result');
             const base64DeepLink = btoa(deepLink);
             const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
             const redirectUrl = `${apiBaseUrl}/payments/redirect?data=${base64DeepLink}`;
