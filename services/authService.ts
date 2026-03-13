@@ -15,9 +15,10 @@ import {
 /**
  * Send SMS verification code to phone number
  */
-export async function sendVerificationCode(phone: string): Promise<VerificationCodeResponse> {
-    const response = await api.post<VerificationCodeResponse>('/auth/send-verification-code', {
-        phone,
+export async function sendVerificationCode(userId: number, verificationType: 'email' | 'phone' = 'email'): Promise<VerificationCodeResponse> {
+    const response = await api.post<VerificationCodeResponse>('/auth/send-verification', {
+        userId,
+        verificationType,
     });
     return response.data;
 }
@@ -25,12 +26,20 @@ export async function sendVerificationCode(phone: string): Promise<VerificationC
 /**
  * Verify SMS code
  */
-export async function verifyCode(phone: string, code: string): Promise<ApiResponse<{ verified: boolean }>> {
-    const response = await api.post<ApiResponse<{ verified: boolean }>>('/auth/verify-code', {
-        phone,
-        code,
-    });
-    return response.data;
+export async function verifyCode(userId: number, code: string, verificationType: 'email' | 'phone' = 'email'): Promise<ApiResponse<{ verified: boolean }>> {
+    try {
+        const response = await api.post<ApiResponse<{ verified: boolean }>>('/auth/verify-code', {
+            userId,
+            code,
+            verificationType,
+        });
+        return {
+            success: true,
+            data: response.data as any,
+        };
+    } catch (error: any) {
+        throw error;
+    }
 }
 
 /**

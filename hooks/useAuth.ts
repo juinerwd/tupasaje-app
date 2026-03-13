@@ -145,5 +145,6 @@ export function useAuth() {
         profile: profileQuery.data,
         profileError: profileQuery.error,
         refetchProfile: profileQuery.refetch,
+        updateProfile: authStore.updateProfile,
     };
 }

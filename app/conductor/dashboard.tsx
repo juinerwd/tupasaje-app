@@ -1,6 +1,7 @@
 import { EmergencyPaymentModal } from '@/components/EmergencyPaymentModal';
 import { GeneratePaymentQRModal } from '@/components/GeneratePaymentQRModal';
 import { QRCodeModal } from '@/components/QRCodeModal';
+import { VerificationBanner } from '@/components/shared/VerificationBanner';
 import { Card, ProgressBar, Skeleton } from '@/components/ui';
 import ButtonAction from '@/components/ui/ButtonAction';
 import { WithdrawalModal } from '@/components/WithdrawalModal';
@@ -274,6 +275,7 @@ export default function ConductorDashboard() {
                     </Animated.View>
                 )}
 
+
                 {/* Earnings Card */}
                 <Animated.View entering={FadeInUp.duration(600).springify()}>
                     <LinearGradient
@@ -320,6 +322,8 @@ export default function ConductorDashboard() {
                         </View>
                     </LinearGradient>
                 </Animated.View>
+
+                <VerificationBanner />
 
                 {/* Quick Actions Grid */}
                 <View style={styles.section}>

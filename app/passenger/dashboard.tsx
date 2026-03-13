@@ -1,4 +1,5 @@
 import { QRCodeModal } from '@/components/QRCodeModal';
+import { VerificationBanner } from '@/components/shared/VerificationBanner';
 import { Card, ProgressBar, Skeleton } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import { useUnreadNotificationsCount } from '@/hooks/useNotifications';
@@ -249,6 +250,7 @@ export default function PassengerDashboard() {
                     />
                 }
             >
+                <VerificationBanner />
                 {/* Header */}
                 <Animated.View
                     entering={FadeInDown.duration(600).springify()}

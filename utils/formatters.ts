@@ -35,22 +35,29 @@ export function formatDate(date: string | Date): string {
 export function formatDateOfBirth(dateString: string): string {
     if (!dateString) return '';
 
-    // Parse the date as UTC to avoid timezone offset issues
-    const date = new Date(dateString);
+    try {
+        // Parse the date as UTC to avoid timezone offset issues
+        const date = new Date(dateString);
 
-    // Extract year, month, day in UTC
-    const year = date.getUTCFullYear();
-    const month = date.getUTCMonth();
-    const day = date.getUTCDate();
+        // Validate the date is valid
+        if (isNaN(date.getTime())) return 'Fecha no válida';
 
-    // Create a new date in local timezone with the same values
-    const localDate = new Date(year, month, day);
+        // Extract year, month, day in UTC
+        const year = date.getUTCFullYear();
+        const month = date.getUTCMonth();
+        const day = date.getUTCDate();
 
-    return new Intl.DateTimeFormat('es-ES', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    }).format(localDate);
+        // Create a new date in local timezone with the same values
+        const localDate = new Date(year, month, day);
+
+        return new Intl.DateTimeFormat('es-ES', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        }).format(localDate);
+    } catch {
+        return 'Fecha no válida';
+    }
 }
 
 /**
@@ -59,18 +66,26 @@ export function formatDateOfBirth(dateString: string): string {
 export function formatDateOfBirthLong(dateString: string): string {
     if (!dateString) return '';
 
-    const date = new Date(dateString);
-    const year = date.getUTCFullYear();
-    const month = date.getUTCMonth();
-    const day = date.getUTCDate();
-    const localDate = new Date(year, month, day);
+    try {
+        const date = new Date(dateString);
 
-    return new Intl.DateTimeFormat('es-ES', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    }).format(localDate);
+        // Validate the date is valid
+        if (isNaN(date.getTime())) return 'Fecha no válida';
+
+        const year = date.getUTCFullYear();
+        const month = date.getUTCMonth();
+        const day = date.getUTCDate();
+        const localDate = new Date(year, month, day);
+
+        return new Intl.DateTimeFormat('es-ES', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        }).format(localDate);
+    } catch {
+        return 'Fecha no válida';
+    }
 }
 
 /**

@@ -128,6 +128,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => ({
             confirmPin: state.pin,
             role: state.userType || UserRole.PASSENGER,
             acceptTerms: true,
+            privacyPolicyAccepted: true,
         };
     },
 }));

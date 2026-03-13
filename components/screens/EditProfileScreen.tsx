@@ -244,6 +244,7 @@ export default function EditProfile() {
                     setUsernameError('Este username ya está en uso');
                 }
             } catch (error) {
+                console.error('Error checking username availability:', error);
                 setUsernameError('Error al verificar disponibilidad');
             } finally {
                 setIsCheckingUsername(false);
@@ -911,7 +912,7 @@ export default function EditProfile() {
                         {/* Date Picker Modal */}
                         {showDatePicker && (
                             <DateTimePicker
-                                value={dateOfBirth ? new Date(dateOfBirth) : new Date()}
+                                value={(() => { const d = dateOfBirth ? new Date(dateOfBirth) : new Date(); return isNaN(d.getTime()) ? new Date() : d; })()}
                                 mode="date"
                                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                                 onChange={handleDateChange}
