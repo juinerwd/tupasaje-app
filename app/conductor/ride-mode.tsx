@@ -76,6 +76,7 @@ export default function RideModeScreen() {
     // State
     const [screenState, setScreenState] = useState<DriverScreenState>('LOADING');
     const [isAvailable, setIsAvailable] = useState(false);
+    const [isAccepting, setIsAccepting] = useState(false);
     const [isTogglingAvailability, setIsTogglingAvailability] = useState(false);
     const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const [incomingRequest, setIncomingRequest] = useState<IncomingRequest | null>(null);
@@ -158,19 +159,55 @@ export default function RideModeScreen() {
 
     // Handle ride events from WebSocket
     useEffect(() => {
+        if (!rideStatus) return;
+
         if (rideStatus === 'CANCELLED') {
             Alert.alert('Viaje cancelado', rideData?.reason || 'El pasajero canceló la solicitud.');
             setScreenState(isAvailable ? 'ACTIVE_IDLE' : 'INACTIVE');
             setCurrentRideId(null);
             setCurrentPassenger(null);
             setIncomingRequest(null);
+            setIsAccepting(false);
             resetStatus();
+        } else if (rideStatus === 'ACCEPTED' && incomingRequest) {
+            // Confirmación de aceptación recibida del servidor
+            setCurrentRideId(incomingRequest.rideId);
+            setCurrentPassenger(incomingRequest.passenger);
+            setRideFare(incomingRequest.estimatedFare ? Number(incomingRequest.estimatedFare) : null);
+            if (incomingRequest.pickupLat && incomingRequest.pickupLng) {
+                setPickupCoords({ lat: incomingRequest.pickupLat, lng: incomingRequest.pickupLng });
+            }
+            setScreenState('RIDE_ACCEPTED');
+            setIncomingRequest(null);
+            setIsAccepting(false);
         }
-    }, [rideStatus]);
+    }, [rideStatus, incomingRequest]);
 
     useEffect(() => {
         if (rideError && !isTogglingAvailability) {
-            Alert.alert('Error', rideError);
+            setIsAccepting(false);
+
+            // Si falló la aceptación o el inicio de viaje, volver al estado anterior
+            if (screenState === 'RIDE_ACCEPTED' || screenState === 'INCOMING_REQUEST') {
+                setScreenState(isAvailable ? 'ACTIVE_IDLE' : 'INACTIVE');
+                setIncomingRequest(null);
+                setCurrentRideId(null);
+            }
+
+            const msg = rideError.toLowerCase();
+            let title = 'Aviso';
+            
+            if (msg.includes('saldo')) {
+                title = 'Saldo insuficiente';
+            } else if (msg.includes('perfil') || msg.includes('completar')) {
+                title = 'Perfil incompleto';
+            } else if (msg.includes('verificación')) {
+                title = 'Cuenta pendiente';
+            } else if (msg.includes('no puedes aceptar') || msg.includes('cancelado')) {
+                title = 'Estado del viaje';
+            }
+
+            Alert.alert(title, rideError);
             clearError();
         }
     }, [rideError]);
@@ -293,21 +330,13 @@ export default function RideModeScreen() {
         }
     }, [startLocationTracking, stopLocationTracking, isTogglingAvailability, clearError, router]);
 
-    // Accept ride
     const handleAcceptRide = useCallback(() => {
-        if (!incomingRequest) return;
+        if (!incomingRequest || isAccepting) return;
 
+        setIsAccepting(true);
         ridesSocketService.acceptRide(incomingRequest.rideId);
-        setCurrentRideId(incomingRequest.rideId);
-        setCurrentPassenger(incomingRequest.passenger);
-        setRideFare(incomingRequest.estimatedFare ? Number(incomingRequest.estimatedFare) : null);
-        // Store pickup coordinates for ETA calculation
-        if (incomingRequest.pickupLat && incomingRequest.pickupLng) {
-            setPickupCoords({ lat: incomingRequest.pickupLat, lng: incomingRequest.pickupLng });
-        }
-        setScreenState('RIDE_ACCEPTED');
-        setIncomingRequest(null);
-    }, [incomingRequest]);
+        // NO cambiamos de pantalla aquí, esperamos al evento 'ride:accepted' para evitar estados inconsistentes
+    }, [incomingRequest, isAccepting]);
 
     // Reject ride
     const handleRejectRide = useCallback(() => {
@@ -468,11 +497,20 @@ export default function RideModeScreen() {
                             </View>
                         )}
 
-                        {isAvailable && !isTogglingAvailability && (
+                        {isAvailable && !isTogglingAvailability && !isAccepting && (
                             <View style={styles.activeHint}>
                                 <ActivityIndicator size="small" color={BrandColors.secondary} />
                                 <Text style={styles.activeHintText}>
                                     Tu ubicación se comparte con pasajeros cercanos
+                                </Text>
+                            </View>
+                        )}
+
+                        {isAccepting && (
+                            <View style={styles.activeHint}>
+                                <ActivityIndicator size="small" color={BrandColors.primary} />
+                                <Text style={styles.activeHintText}>
+                                    Aceptando solicitud...
                                 </Text>
                             </View>
                         )}

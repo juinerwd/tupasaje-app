@@ -136,6 +136,20 @@ export default function RequestRideScreen() {
 
             setUserLocation(coords);
             setScreenState('MAP_BROWSE');
+
+            // NEW: Automatically detect origin zone from coordinates
+            try {
+                const token = await SecureStore.getItemAsync('access_token');
+                const res = await fetch(`${API_BASE}/rides/fare/estimate?city=Popayán&pickupLat=${coords.latitude}&pickupLng=${coords.longitude}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                const data = await res.json();
+                if (data.detectedOriginZone) {
+                    setOriginZone(data.detectedOriginZone);
+                }
+            } catch (e) {
+                console.warn('Could not auto-detect origin zone');
+            }
         })();
     }, []);
 
@@ -170,7 +184,20 @@ export default function RequestRideScreen() {
 
     useEffect(() => {
         if (rideError) {
-            Alert.alert('Error', rideError);
+            const msg = rideError.toLowerCase();
+            let title = 'Error';
+            
+            if (msg.includes('no hay conductores') || msg.includes('disponibles')) {
+                title = 'Sin conductores';
+            } else if (msg.includes('cancelado')) {
+                title = 'Cancelación';
+            } else if (msg.includes('saldo')) {
+                title = 'Saldo insuficiente';
+            } else if (msg.includes('activo')) {
+                title = 'Viaje en curso';
+            }
+
+            Alert.alert(title, rideError);
             clearError();
         }
     }, [rideError]);
@@ -186,7 +213,30 @@ export default function RequestRideScreen() {
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
         }, 500);
-    }, [isRideActive]);
+
+        // Fetch fare estimate when driver selected (only if destination exists)
+        if (destination && userLocation) {
+            updateFareEstimate(userLocation, { latitude: driver.latitude, longitude: driver.longitude });
+        }
+    }, [isRideActive, destination, userLocation]);
+
+    const updateFareEstimate = async (origin: { latitude: number, longitude: number }, dest: { latitude: number, longitude: number }) => {
+        try {
+            const token = await SecureStore.getItemAsync('access_token');
+            const url = `${API_BASE}/rides/fare/estimate?city=Popayán&pickupLat=${origin.latitude}&pickupLng=${origin.longitude}&dropoffLat=${dest.latitude}&dropoffLng=${dest.longitude}`;
+            const res = await fetch(url, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await res.json();
+            if (data.fare) {
+                setEstimatedFare(data.fare);
+                if (data.detectedOriginZone) setOriginZone(data.detectedOriginZone);
+                if (data.detectedDestinationZone) setDestZone(data.detectedDestinationZone);
+            }
+        } catch (e) {
+            console.warn('Fare estimate failed');
+        }
+    };
 
     // Request ride
     const handleRequestRide = useCallback(async () => {
@@ -223,7 +273,9 @@ export default function RequestRideScreen() {
                 Alert.alert('Error', ride.message || 'No se pudo crear la solicitud');
             }
         } catch (error: any) {
-            Alert.alert('Error', error.message || 'Error al solicitar taxi');
+            const msg = error.message || '';
+            const title = msg.toLowerCase().includes('saldo') ? 'Saldo insuficiente' : 'Solicitud fallida';
+            Alert.alert(title, msg || 'No pudimos procesar tu solicitud de taxi.');
         }
     }, [selectedDriver, userLocation, destination, originZone, destZone]);
 
@@ -235,6 +287,9 @@ export default function RequestRideScreen() {
             setShowDestModal(true);
             return;
         }
+
+        // NEW: Fetch/Update estimate before broadcast
+        await updateFareEstimate(userLocation, userLocation);
 
         try {
             // Create ride request via REST (no specific driver)
@@ -263,7 +318,9 @@ export default function RequestRideScreen() {
                 Alert.alert('Error', ride.message || 'No se pudo crear la solicitud');
             }
         } catch (error: any) {
-            Alert.alert('Error', error.message || 'Error al solicitar taxi');
+            const msg = error.message || '';
+            const title = msg.toLowerCase().includes('conductores') ? 'Aviso' : 'Solicitud fallida';
+            Alert.alert(title, msg || 'No se pudo enviar la solicitud general.');
         }
     }, [userLocation, destination, originZone, destZone]);
 
