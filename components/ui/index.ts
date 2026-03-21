@@ -6,7 +6,8 @@ export { ErrorMessage } from './ErrorMessage';
 export { Input } from './Input';
 export { LegalContentModal } from './LegalContentModal';
 export { LoadingSpinner } from './LoadingSpinner';
+export { NumericKeypad } from './NumericKeypad';
+export { PinDisplay } from './PinDisplay';
 export { PinInput } from './PinInput';
 export { ProgressBar } from './ProgressBar';
 export { Skeleton } from './Skeleton';
-

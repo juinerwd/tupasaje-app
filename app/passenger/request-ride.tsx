@@ -53,6 +53,18 @@ type ScreenState =
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+}
+
 export default function RequestRideScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
@@ -72,6 +84,11 @@ export default function RequestRideScreen() {
     const [ratingComment, setRatingComment] = useState('');
     const [isBroadcast, setIsBroadcast] = useState(false);
     const [driversNotified, setDriversNotified] = useState(0);
+    const [availableZones, setAvailableZones] = useState<{ id: number; name: string }[]>([]);
+    const [cityFareId, setCityFareId] = useState<number | null>(null);
+    const [destinationLocation, setDestinationLocation] = useState<{ latitude: number, longitude: number } | null>(null);
+    const [isSelectingOnMap, setIsSelectingOnMap] = useState(false);
+    const [cityName, setCityName] = useState<string>('Buenaventura');
 
     // Determine if there is an active ride (to stop polling and hide markers)
     const isRideActive = screenState === 'WAITING_FOR_DRIVER'
@@ -137,18 +154,41 @@ export default function RequestRideScreen() {
             setUserLocation(coords);
             setScreenState('MAP_BROWSE');
 
+            let detectedCity = 'Buenaventura';
+            try {
+                const geocode = await Location.reverseGeocodeAsync({
+                    latitude: coords.latitude,
+                    longitude: coords.longitude
+                });
+                if (geocode && geocode.length > 0) {
+                    detectedCity = geocode[0].city || geocode[0].subregion || geocode[0].region || detectedCity;
+                }
+            } catch (e) {
+                console.warn('Reverse geocode failed', e);
+            }
+            setCityName(detectedCity);
+
             // NEW: Automatically detect origin zone from coordinates
             try {
                 const token = await SecureStore.getItemAsync('access_token');
-                const res = await fetch(`${API_BASE}/rides/fare/estimate?city=Popayán&pickupLat=${coords.latitude}&pickupLng=${coords.longitude}`, {
+                const res = await fetch(`${API_BASE}/rides/fare/estimate?city=${encodeURIComponent(detectedCity)}&pickupLat=${coords.latitude}&pickupLng=${coords.longitude}`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 const data = await res.json();
                 if (data.detectedOriginZone) {
                     setOriginZone(data.detectedOriginZone);
                 }
+                if (data.cityFareId) {
+                    setCityFareId(data.cityFareId);
+                    // Fetch all available zones for this city
+                    const zonesRes = await fetch(`${API_BASE}/rides/city-fares/${data.cityFareId}/geozones`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    const zonesData = await zonesRes.json();
+                    setAvailableZones(zonesData);
+                }
             } catch (e) {
-                console.warn('Could not auto-detect origin zone');
+                console.warn('Could not auto-detect origin zone or fetch city zones');
             }
         })();
     }, []);
@@ -186,7 +226,7 @@ export default function RequestRideScreen() {
         if (rideError) {
             const msg = rideError.toLowerCase();
             let title = 'Error';
-            
+
             if (msg.includes('no hay conductores') || msg.includes('disponibles')) {
                 title = 'Sin conductores';
             } else if (msg.includes('cancelado')) {
@@ -215,26 +255,32 @@ export default function RequestRideScreen() {
         }, 500);
 
         // Fetch fare estimate when driver selected (only if destination exists)
-        if (destination && userLocation) {
+        if (destinationLocation && userLocation) {
+            updateFareEstimate(userLocation, destinationLocation);
+        } else if (destination && userLocation) {
             updateFareEstimate(userLocation, { latitude: driver.latitude, longitude: driver.longitude });
         }
-    }, [isRideActive, destination, userLocation]);
+    }, [isRideActive, destination, userLocation, destinationLocation]);
 
     const updateFareEstimate = async (origin: { latitude: number, longitude: number }, dest: { latitude: number, longitude: number }) => {
         try {
+            const distance = getDistanceFromLatLonInKm(origin.latitude, origin.longitude, dest.latitude, dest.longitude);
             const token = await SecureStore.getItemAsync('access_token');
-            const url = `${API_BASE}/rides/fare/estimate?city=Popayán&pickupLat=${origin.latitude}&pickupLng=${origin.longitude}&dropoffLat=${dest.latitude}&dropoffLng=${dest.longitude}`;
+            const url = `${API_BASE}/rides/fare/estimate?city=${encodeURIComponent(cityName)}&pickupLat=${origin.latitude}&pickupLng=${origin.longitude}&dropoffLat=${dest.latitude}&dropoffLng=${dest.longitude}&distanceKm=${distance.toFixed(3)}`;
             const res = await fetch(url, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const data = await res.json();
-            if (data.fare) {
-                setEstimatedFare(data.fare);
+            if (data.fare !== undefined && data.fare !== null) {
+                setEstimatedFare(Number(data.fare));
                 if (data.detectedOriginZone) setOriginZone(data.detectedOriginZone);
                 if (data.detectedDestinationZone) setDestZone(data.detectedDestinationZone);
+                if (data.cityFareId && !cityFareId) setCityFareId(data.cityFareId);
             }
+            return data;
         } catch (e) {
             console.warn('Fare estimate failed');
+            return null;
         }
     };
 
@@ -242,9 +288,23 @@ export default function RequestRideScreen() {
     const handleRequestRide = useCallback(async () => {
         if (!selectedDriver || !userLocation) return;
 
-        if (!destination.trim()) {
+        if (!destination.trim() && !destinationLocation) {
             setShowDestModal(true);
             return;
+        }
+
+        const dropoffLat = destinationLocation?.latitude || selectedDriver.latitude;
+        const dropoffLng = destinationLocation?.longitude || selectedDriver.longitude;
+
+        let finalOriginZone = originZone;
+        let finalDestZone = destZone;
+
+        if (destinationLocation) {
+            const data = await updateFareEstimate(userLocation, destinationLocation);
+            if (data) {
+                if (data.detectedOriginZone) finalOriginZone = data.detectedOriginZone;
+                if (data.detectedDestinationZone) finalDestZone = data.detectedDestinationZone;
+            }
         }
 
         try {
@@ -253,13 +313,13 @@ export default function RequestRideScreen() {
                 pickupLat: userLocation.latitude,
                 pickupLng: userLocation.longitude,
                 pickupAddress: 'Mi ubicación',
-                pickupZone: originZone || undefined,
-                dropoffLat: selectedDriver.latitude,
-                dropoffLng: selectedDriver.longitude,
-                dropoffAddress: destination,
-                dropoffZone: destZone || undefined,
+                pickupZone: finalOriginZone || undefined,
+                dropoffLat,
+                dropoffLng,
+                dropoffAddress: destination || 'Ubicación seleccionada',
+                dropoffZone: finalDestZone || undefined,
                 paymentMethod: 'CASH',
-                cityName: 'Popayán', // TODO: detect from location
+                cityName: cityName,
             });
 
             if (ride.id) {
@@ -277,19 +337,37 @@ export default function RequestRideScreen() {
             const title = msg.toLowerCase().includes('saldo') ? 'Saldo insuficiente' : 'Solicitud fallida';
             Alert.alert(title, msg || 'No pudimos procesar tu solicitud de taxi.');
         }
-    }, [selectedDriver, userLocation, destination, originZone, destZone]);
+    }, [selectedDriver, userLocation, destination, originZone, destZone, destinationLocation, cityName]);
 
     // Broadcast ride to all drivers
     const handleBroadcastRide = useCallback(async () => {
         if (!userLocation) return;
 
-        if (!destination.trim()) {
+        if (!destination.trim() && !destinationLocation) {
             setShowDestModal(true);
             return;
         }
 
+        let finalOriginZone = originZone;
+        let finalDestZone = destZone;
+        let finalEstimatedFare = estimatedFare;
+
         // NEW: Fetch/Update estimate before broadcast
-        await updateFareEstimate(userLocation, userLocation);
+        if (destinationLocation) {
+            const data = await updateFareEstimate(userLocation, destinationLocation);
+            if (data) {
+                if (data.detectedOriginZone) finalOriginZone = data.detectedOriginZone;
+                if (data.detectedDestinationZone) finalDestZone = data.detectedDestinationZone;
+                if (data.fare) finalEstimatedFare = data.fare;
+            }
+        } else {
+            const data = await updateFareEstimate(userLocation, userLocation);
+            if (data) {
+                if (data.detectedOriginZone) finalOriginZone = data.detectedOriginZone;
+                if (data.detectedDestinationZone) finalDestZone = data.detectedDestinationZone;
+                if (data.fare) finalEstimatedFare = data.fare;
+            }
+        }
 
         try {
             // Create ride request via REST (no specific driver)
@@ -297,13 +375,13 @@ export default function RequestRideScreen() {
                 pickupLat: userLocation.latitude,
                 pickupLng: userLocation.longitude,
                 pickupAddress: 'Mi ubicación',
-                pickupZone: originZone || undefined,
-                dropoffLat: userLocation.latitude, // Same coords — driver comes to you
-                dropoffLng: userLocation.longitude,
-                dropoffAddress: destination,
-                dropoffZone: destZone || undefined,
+                pickupZone: finalOriginZone || undefined,
+                dropoffLat: destinationLocation?.latitude || userLocation.latitude,
+                dropoffLng: destinationLocation?.longitude || userLocation.longitude,
+                dropoffAddress: destination || 'Ubicación seleccionada',
+                dropoffZone: finalDestZone || undefined,
                 paymentMethod: 'CASH',
-                cityName: 'Popayán',
+                cityName: cityName,
             });
 
             if (ride.id) {
@@ -322,7 +400,7 @@ export default function RequestRideScreen() {
             const title = msg.toLowerCase().includes('conductores') ? 'Aviso' : 'Solicitud fallida';
             Alert.alert(title, msg || 'No se pudo enviar la solicitud general.');
         }
-    }, [userLocation, destination, originZone, destZone]);
+    }, [userLocation, destination, originZone, destZone, destinationLocation, cityName, estimatedFare]);
 
     // Cancel ride
     const handleCancel = useCallback(() => {
@@ -384,6 +462,13 @@ export default function RequestRideScreen() {
                 }}
                 showsUserLocation
                 showsMyLocationButton={false}
+                onPress={(e) => {
+                    if (isSelectingOnMap && !isRideActive) {
+                        const newLoc = e.nativeEvent.coordinate;
+                        setDestinationLocation(newLoc);
+                        updateFareEstimate(userLocation, newLoc);
+                    }
+                }}
             >
                 {/* Driver markers — only shown when NO active ride */}
                 {!isRideActive && drivers.map((driver) => (
@@ -429,7 +514,27 @@ export default function RequestRideScreen() {
                         </View>
                     </Marker>
                 )}
+
+                {/* Destination marker — shown during selection */}
+                {(destinationLocation || isSelectingOnMap) && !isRideActive && (
+                    <Marker
+                        coordinate={destinationLocation || userLocation}
+                        pinColor={BrandColors.error}
+                        title="Destino"
+                    />
+                )}
             </MapView>
+
+            {/* Map Selection Instruction Overlay — Top position */}
+            {isSelectingOnMap && (
+                <View style={[styles.mapSelectionOverlay, { top: insets.top + 70 }]}>
+                    <Ionicons name="location" size={24} color={BrandColors.error} />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={styles.selectionHint}>Toca el mapa para establecer tu destino</Text>
+                        <Text style={styles.selectionSubHint}>Fija exactamente a dónde vas para calcular tu tarifa</Text>
+                    </View>
+                </View>
+            )}
 
             {/* Back button */}
             <TouchableOpacity
@@ -456,7 +561,7 @@ export default function RequestRideScreen() {
 
             {/* Connection status */}
             {!isConnected && (
-                <View style={[styles.connectionBanner, { top: insets.top + 60 }]}>
+                <View style={[styles.connectionBanner, { top: insets.top + (isSelectingOnMap ? 150 : 60) }]}>
                     <Ionicons name="cloud-offline" size={16} color="#fff" />
                     <Text style={styles.connectionText}>Conectando...</Text>
                 </View>
@@ -464,241 +569,273 @@ export default function RequestRideScreen() {
 
             {/* Bottom Panel */}
             <View style={[styles.bottomPanel, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-                {/* MAP_BROWSE — Show drivers count */}
-                {screenState === 'MAP_BROWSE' && (
-                    <View>
-                        <Text style={styles.panelTitle}>
-                            🚕 Taxi Personal
-                        </Text>
-                        <Text style={styles.panelSubtitle}>
-                            {driversLoading
-                                ? 'Buscando conductores...'
-                                : drivers.length > 0
-                                    ? `${drivers.length} conductor${drivers.length > 1 ? 'es' : ''} disponible${drivers.length > 1 ? 's' : ''}`
-                                    : 'No hay conductores disponibles cerca'
-                            }
-                        </Text>
-                        {drivers.length > 0 && (
-                            <>
-                                <Text style={styles.hintText}>
-                                    Toca un taxi en el mapa o envia una solicitud a todos los conductores
-                                </Text>
-                                <TouchableOpacity
-                                    style={styles.broadcastButton}
-                                    onPress={() => setScreenState('BROADCAST_DEST')}
-                                >
-                                    <Ionicons name="megaphone-outline" size={18} color="#fff" />
-                                    <Text style={styles.broadcastButtonText}>Solicitar a cualquier taxi</Text>
-                                </TouchableOpacity>
-                            </>
-                        )}
-                    </View>
-                )}
-
-                {/* BROADCAST_DEST — Entering destination for broadcast */}
-                {screenState === 'BROADCAST_DEST' && (
-                    <View>
-                        <View style={styles.broadcastHeader}>
-                            <Ionicons name="megaphone" size={22} color={BrandColors.secondary} />
-                            <Text style={styles.panelTitle}>Solicitar a todos</Text>
-                        </View>
-                        <Text style={styles.panelSubtitle}>
-                            Tu solicitud se enviará a {drivers.length} conductor{drivers.length > 1 ? 'es' : ''} disponible{drivers.length > 1 ? 's' : ''}
-                        </Text>
-
-                        {/* Destination input */}
-                        <TouchableOpacity
-                            style={styles.destInput}
-                            onPress={() => setShowDestModal(true)}
-                        >
-                            <Ionicons name="location" size={18} color={BrandColors.primary} />
-                            <Text style={destination ? styles.destText : styles.destPlaceholder}>
-                                {destination || '¿A dónde vas?'}
-                            </Text>
-                        </TouchableOpacity>
-
-                        <View style={styles.buttonRow}>
-                            <TouchableOpacity
-                                style={styles.cancelButton}
-                                onPress={() => setScreenState('MAP_BROWSE')}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancelar</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.broadcastButton}
-                                onPress={handleBroadcastRide}
-                            >
-                                <Ionicons name="megaphone" size={18} color="#fff" />
-                                <Text style={styles.broadcastButtonText}>Enviar solicitud</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
-
-                {/* DRIVER_SELECTED — Show driver info + request button */}
-                {screenState === 'DRIVER_SELECTED' && selectedDriver && (
-                    <View>
-                        <View style={styles.driverInfoRow}>
-                            <View style={styles.driverAvatar}>
-                                <Ionicons name="person" size={28} color={BrandColors.primary} />
-                            </View>
-                            <View style={styles.driverDetails}>
-                                <Text style={styles.driverName}>{selectedDriver.fullName}</Text>
-                                <Text style={styles.driverVehicle}>
-                                    {selectedDriver.vehicleColor} {selectedDriver.vehicleModel} • {selectedDriver.vehiclePlate}
-                                </Text>
-                                <View style={styles.ratingRow}>
-                                    <Ionicons name="star" size={14} color="#f59e0b" />
-                                    <Text style={styles.ratingText}>{selectedDriver.rating.toFixed(1)}</Text>
-                                    <Text style={styles.tripsText}> • {selectedDriver.totalTrips} viajes</Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Destination input */}
-                        <TouchableOpacity
-                            style={styles.destInput}
-                            onPress={() => setShowDestModal(true)}
-                        >
-                            <Ionicons name="location" size={18} color={BrandColors.primary} />
-                            <Text style={destination ? styles.destText : styles.destPlaceholder}>
-                                {destination || '¿A dónde vas?'}
-                            </Text>
-                        </TouchableOpacity>
-
+                {isSelectingOnMap ? (
+                    <View style={styles.confirmSelectionContainer}>
                         {estimatedFare !== null && (
-                            <View style={styles.fareEstimate}>
-                                <Text style={styles.fareLabel}>Tarifa estimada:</Text>
+                            <View style={[styles.fareEstimate, { marginBottom: 12 }]}>
+                                <Text style={styles.fareLabel}>Tarifa calculada:</Text>
                                 <Text style={styles.fareAmount}>
                                     ${estimatedFare.toLocaleString('es-CO')} COP
                                 </Text>
                             </View>
                         )}
-
-                        <View style={styles.buttonRow}>
-                            <TouchableOpacity
-                                style={styles.cancelButton}
-                                onPress={() => {
-                                    setScreenState('MAP_BROWSE');
-                                    setSelectedDriver(null);
-                                }}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancelar</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.requestButton}
-                                onPress={handleRequestRide}
-                            >
-                                <Ionicons name="car" size={18} color="#fff" />
-                                <Text style={styles.requestButtonText}>Solicitar Taxi</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
-
-                {/* WAITING_FOR_DRIVER */}
-                {screenState === 'WAITING_FOR_DRIVER' && (
-                    <View style={styles.waitingContainer}>
-                        <ActivityIndicator size="large" color={BrandColors.secondary} />
-                        <Text style={styles.waitingTitle}>
-                            {isBroadcast ? 'Buscando conductor...' : 'Esperando respuesta...'}
-                        </Text>
-                        <Text style={styles.waitingSubtitle}>
-                            {isBroadcast
-                                ? `Solicitud enviada a ${driversNotified} conductor${driversNotified > 1 ? 'es' : ''}. El primero en aceptar será tu conductor.`
-                                : 'El conductor decidirá si acepta tu solicitud'
-                            }
-                        </Text>
-                        <TouchableOpacity style={styles.cancelWaitButton} onPress={handleCancel}>
-                            <Text style={styles.cancelWaitText}>Cancelar solicitud</Text>
+                        <TouchableOpacity
+                            style={styles.confirmSelectionButton}
+                            onPress={() => setIsSelectingOnMap(false)}
+                        >
+                            <Text style={styles.confirmSelectionButtonText}>Confirmar este punto</Text>
                         </TouchableOpacity>
                     </View>
-                )}
-
-                {/* DRIVER_ACCEPTED */}
-                {screenState === 'DRIVER_ACCEPTED' && rideData?.driver && (
-                    <View>
-                        <View style={styles.statusBadge}>
-                            <Ionicons name="checkmark-circle" size={20} color={BrandColors.success} />
-                            <Text style={styles.statusText}>¡Conductor en camino!</Text>
-                        </View>
-                        <View style={styles.driverInfoRow}>
-                            <View style={styles.driverAvatar}>
-                                <Ionicons name="person" size={28} color={BrandColors.primary} />
-                            </View>
-                            <View style={styles.driverDetails}>
-                                <Text style={styles.driverName}>{rideData.driver.fullName}</Text>
-                                {rideData.driver.driver && (
-                                    <Text style={styles.driverVehicle}>
-                                        {rideData.driver.driver.vehicleColor} {rideData.driver.driver.vehicleModel} • {rideData.driver.driver.vehiclePlate}
-                                    </Text>
+                ) : (
+                    <>
+                        {/* MAP_BROWSE — Show drivers count */}
+                        {screenState === 'MAP_BROWSE' && (
+                            <View>
+                                <Text style={styles.panelTitle}>
+                                    🚕 Taxi Personal
+                                </Text>
+                                <Text style={styles.panelSubtitle}>
+                                    {driversLoading
+                                        ? 'Buscando conductores...'
+                                        : drivers.length > 0
+                                            ? `${drivers.length} conductor${drivers.length > 1 ? 'es' : ''} disponible${drivers.length > 1 ? 's' : ''}`
+                                            : 'No hay conductores disponibles cerca'
+                                    }
+                                </Text>
+                                {drivers.length > 0 && (
+                                    <>
+                                        <Text style={styles.hintText}>
+                                            Toca un taxi en el mapa o envia una solicitud a todos los conductores
+                                        </Text>
+                                        <TouchableOpacity
+                                            style={styles.broadcastButton}
+                                            onPress={() => {
+                                                setScreenState('BROADCAST_DEST');
+                                                setIsSelectingOnMap(true); // Jump to map to select destination
+                                            }}
+                                        >
+                                            <Ionicons name="megaphone-outline" size={18} color="#fff" />
+                                            <Text style={styles.broadcastButtonText}>Solicitar a cualquier taxi</Text>
+                                        </TouchableOpacity>
+                                    </>
                                 )}
-                                {rideData.driver.phoneNumber && (
-                                    <Text style={styles.phoneText}>
-                                        📞 {rideData.driver.phoneNumber}
-                                    </Text>
-                                )}
                             </View>
-                        </View>
-                        <TouchableOpacity style={styles.cancelSmall} onPress={handleCancel}>
-                            <Text style={styles.cancelSmallText}>Cancelar viaje</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
+                        )}
+                        {/* BROADCAST_DEST — Entering destination for broadcast */}
+                        {screenState === 'BROADCAST_DEST' && (
+                            <View>
+                                <View style={styles.broadcastHeader}>
+                                    <Ionicons name="megaphone" size={22} color={BrandColors.secondary} />
+                                    <Text style={styles.panelTitle}>Solicitar a todos</Text>
+                                </View>
+                                <Text style={styles.panelSubtitle}>
+                                    Tu solicitud se enviará a {drivers.length} conductor{drivers.length > 1 ? 'es' : ''} disponible{drivers.length > 1 ? 's' : ''}
+                                </Text>
 
-                {/* IN_PROGRESS */}
-                {screenState === 'IN_PROGRESS' && (
-                    <View>
-                        <View style={styles.statusBadge}>
-                            <Ionicons name="navigate" size={20} color={BrandColors.info} />
-                            <Text style={styles.statusText}>Viaje en progreso</Text>
-                        </View>
-                        <Text style={styles.progressHint}>
-                            Puedes ver la ubicación del conductor en el mapa
-                        </Text>
-                    </View>
-                )}
-
-                {/* RATE_RIDE */}
-                {screenState === 'RATE_RIDE' && (
-                    <View>
-                        <Text style={styles.rateTitle}>¿Cómo fue tu viaje?</Text>
-                        <View style={styles.starsRow}>
-                            {[1, 2, 3, 4, 5].map((star) => (
-                                <TouchableOpacity key={star} onPress={() => setRating(star)}>
-                                    <Ionicons
-                                        name={star <= rating ? 'star' : 'star-outline'}
-                                        size={36}
-                                        color={star <= rating ? '#f59e0b' : BrandColors.gray[300]}
-                                    />
+                                {/* Destination input */}
+                                <TouchableOpacity
+                                    style={styles.destInput}
+                                    onPress={() => setShowDestModal(true)}
+                                >
+                                    <Ionicons name="location" size={18} color={BrandColors.primary} />
+                                    <Text style={destination || destinationLocation ? styles.destText : styles.destPlaceholder}>
+                                        {destination || (destinationLocation ? `Ubicación en mapa ${destZone ? `(${destZone})` : ''}` : '¿A dónde vas?')}
+                                    </Text>
                                 </TouchableOpacity>
-                            ))}
-                        </View>
-                        <TextInput
-                            style={styles.commentInput}
-                            placeholder="Comentario (opcional)"
-                            value={ratingComment}
-                            onChangeText={setRatingComment}
-                            multiline
-                        />
-                        <TouchableOpacity
-                            style={[styles.requestButton, rating === 0 && styles.disabledButton]}
-                            onPress={handleRate}
-                            disabled={rating === 0}
-                        >
-                            <Text style={styles.requestButtonText}>Enviar valoración</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.skipButton}
-                            onPress={() => {
-                                setScreenState('MAP_BROWSE');
-                                setCurrentRideId(null);
-                                resetStatus();
-                            }}
-                        >
-                            <Text style={styles.skipButtonText}>Omitir</Text>
-                        </TouchableOpacity>
-                    </View>
+
+                                {estimatedFare !== null && (
+                                    <View style={styles.fareEstimate}>
+                                        <Text style={styles.fareLabel}>Tarifa estimada:</Text>
+                                        <Text style={styles.fareAmount}>
+                                            ${estimatedFare.toLocaleString('es-CO')} COP
+                                        </Text>
+                                    </View>
+                                )}
+
+                                <View style={styles.buttonRow}>
+                                    <TouchableOpacity
+                                        style={styles.cancelButton}
+                                        onPress={() => setScreenState('MAP_BROWSE')}
+                                    >
+                                        <Text style={styles.cancelButtonText}>Cancelar</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.broadcastButton}
+                                        onPress={handleBroadcastRide}
+                                    >
+                                        <Ionicons name="megaphone" size={18} color="#fff" />
+                                        <Text style={styles.broadcastButtonText}>Enviar solicitud</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        )}
+
+                        {/* DRIVER_SELECTED — Show driver info + request button */}
+                        {screenState === 'DRIVER_SELECTED' && selectedDriver && (
+                            <View>
+                                <View style={styles.driverInfoRow}>
+                                    <View style={styles.driverAvatar}>
+                                        <Ionicons name="person" size={28} color={BrandColors.primary} />
+                                    </View>
+                                    <View style={styles.driverDetails}>
+                                        <Text style={styles.driverName}>{selectedDriver.fullName}</Text>
+                                        <Text style={styles.driverVehicle}>
+                                            {selectedDriver.vehicleColor} {selectedDriver.vehicleModel} • {selectedDriver.vehiclePlate}
+                                        </Text>
+                                        <View style={styles.ratingRow}>
+                                            <Ionicons name="star" size={14} color="#f59e0b" />
+                                            <Text style={styles.ratingText}>{selectedDriver.rating.toFixed(1)}</Text>
+                                            <Text style={styles.tripsText}> • {selectedDriver.totalTrips} viajes</Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                {/* Destination input */}
+                                <TouchableOpacity
+                                    style={styles.destInput}
+                                    onPress={() => setShowDestModal(true)}
+                                >
+                                    <Ionicons name="location" size={18} color={BrandColors.primary} />
+                                    <Text style={destination || destinationLocation ? styles.destText : styles.destPlaceholder}>
+                                        {destination || (destinationLocation ? `Ubicación en mapa ${destZone ? `(${destZone})` : ''}` : '¿A dónde vas?')}
+                                    </Text>
+                                </TouchableOpacity>
+
+                                {estimatedFare !== null && (
+                                    <View style={styles.fareEstimate}>
+                                        <Text style={styles.fareLabel}>Tarifa estimada:</Text>
+                                        <Text style={styles.fareAmount}>
+                                            ${estimatedFare.toLocaleString('es-CO')} COP
+                                        </Text>
+                                    </View>
+                                )}
+
+                                <View style={styles.buttonRow}>
+                                    <TouchableOpacity
+                                        style={styles.cancelButton}
+                                        onPress={() => {
+                                            setScreenState('MAP_BROWSE');
+                                            setSelectedDriver(null);
+                                        }}
+                                    >
+                                        <Text style={styles.cancelButtonText}>Cancelar</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.requestButton}
+                                        onPress={handleRequestRide}
+                                    >
+                                        <Ionicons name="car" size={18} color="#fff" />
+                                        <Text style={styles.requestButtonText}>Solicitar Taxi</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        )}
+
+                        {/* WAITING_FOR_DRIVER */}
+                        {screenState === 'WAITING_FOR_DRIVER' && (
+                            <View style={styles.waitingContainer}>
+                                <ActivityIndicator size="large" color={BrandColors.secondary} />
+                                <Text style={styles.waitingTitle}>
+                                    {isBroadcast ? 'Buscando conductor...' : 'Esperando respuesta...'}
+                                </Text>
+                                <Text style={styles.waitingSubtitle}>
+                                    {isBroadcast
+                                        ? `Solicitud enviada a ${driversNotified} conductor${driversNotified > 1 ? 'es' : ''}. El primero en aceptar será tu conductor.`
+                                        : 'El conductor decidirá si acepta tu solicitud'
+                                    }
+                                </Text>
+                                <TouchableOpacity style={styles.cancelWaitButton} onPress={handleCancel}>
+                                    <Text style={styles.cancelWaitText}>Cancelar solicitud</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
+                        {/* DRIVER_ACCEPTED */}
+                        {screenState === 'DRIVER_ACCEPTED' && rideData?.driver && (
+                            <View>
+                                <View style={styles.statusBadge}>
+                                    <Ionicons name="checkmark-circle" size={20} color={BrandColors.success} />
+                                    <Text style={styles.statusText}>¡Conductor en camino!</Text>
+                                </View>
+                                <View style={styles.driverInfoRow}>
+                                    <View style={styles.driverAvatar}>
+                                        <Ionicons name="person" size={28} color={BrandColors.primary} />
+                                    </View>
+                                    <View style={styles.driverDetails}>
+                                        <Text style={styles.driverName}>{rideData.driver.fullName}</Text>
+                                        {rideData.driver.driver && (
+                                            <Text style={styles.driverVehicle}>
+                                                {rideData.driver.driver.vehicleColor} {rideData.driver.driver.vehicleModel} • {rideData.driver.driver.vehiclePlate}
+                                            </Text>
+                                        )}
+                                        {rideData.driver.phoneNumber && (
+                                            <Text style={styles.phoneText}>
+                                                📞 {rideData.driver.phoneNumber}
+                                            </Text>
+                                        )}
+                                    </View>
+                                </View>
+                                <TouchableOpacity style={styles.cancelSmall} onPress={handleCancel}>
+                                    <Text style={styles.cancelSmallText}>Cancelar viaje</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
+                        {/* IN_PROGRESS */}
+                        {screenState === 'IN_PROGRESS' && (
+                            <View>
+                                <View style={styles.statusBadge}>
+                                    <Ionicons name="navigate" size={20} color={BrandColors.info} />
+                                    <Text style={styles.statusText}>Viaje en progreso</Text>
+                                </View>
+                                <Text style={styles.progressHint}>
+                                    Puedes ver la ubicación del conductor en el mapa
+                                </Text>
+                            </View>
+                        )}
+
+                        {/* RATE_RIDE */}
+                        {screenState === 'RATE_RIDE' && (
+                            <View>
+                                <Text style={styles.rateTitle}>¿Cómo fue tu viaje?</Text>
+                                <View style={styles.starsRow}>
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <TouchableOpacity key={star} onPress={() => setRating(star)}>
+                                            <Ionicons
+                                                name={star <= rating ? 'star' : 'star-outline'}
+                                                size={36}
+                                                color={star <= rating ? '#f59e0b' : BrandColors.gray[300]}
+                                            />
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                <TextInput
+                                    style={styles.commentInput}
+                                    placeholder="Comentario (opcional)"
+                                    value={ratingComment}
+                                    onChangeText={setRatingComment}
+                                    multiline
+                                />
+                                <TouchableOpacity
+                                    style={[styles.requestButton, rating === 0 && styles.disabledButton]}
+                                    onPress={handleRate}
+                                    disabled={rating === 0}
+                                >
+                                    <Text style={styles.requestButtonText}>Enviar valoración</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.skipButton}
+                                    onPress={() => {
+                                        setScreenState('MAP_BROWSE');
+                                        setCurrentRideId(null);
+                                        resetStatus();
+                                    }}
+                                >
+                                    <Text style={styles.skipButtonText}>Omitir</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </>
                 )}
             </View>
 
@@ -725,6 +862,23 @@ export default function RequestRideScreen() {
                                 onChangeText={setOriginZone}
                                 placeholderTextColor={BrandColors.gray[300]}
                             />
+                            {originZone.length > 0 && availableZones.filter(z => z.name.toLowerCase().includes(originZone.toLowerCase()) && z.name.toLowerCase() !== originZone.toLowerCase()).length > 0 && (
+                                <View style={styles.suggestionsContainer}>
+                                    {availableZones
+                                        .filter(z => z.name.toLowerCase().includes(originZone.toLowerCase()) && z.name.toLowerCase() !== originZone.toLowerCase())
+                                        .slice(0, 3)
+                                        .map(zone => (
+                                            <TouchableOpacity
+                                                key={zone.id}
+                                                style={styles.suggestionItem}
+                                                onPress={() => setOriginZone(zone.name)}
+                                            >
+                                                <Text style={styles.suggestionText}>{zone.name}</Text>
+                                            </TouchableOpacity>
+                                        ))
+                                    }
+                                </View>
+                            )}
                         </View>
 
                         <View style={styles.inputGroup}>
@@ -747,6 +901,23 @@ export default function RequestRideScreen() {
                                 onChangeText={setDestZone}
                                 placeholderTextColor={BrandColors.gray[300]}
                             />
+                            {destZone.length > 0 && availableZones.filter(z => z.name.toLowerCase().includes(destZone.toLowerCase()) && z.name.toLowerCase() !== destZone.toLowerCase()).length > 0 && (
+                                <View style={styles.suggestionsContainer}>
+                                    {availableZones
+                                        .filter(z => z.name.toLowerCase().includes(destZone.toLowerCase()) && z.name.toLowerCase() !== destZone.toLowerCase())
+                                        .slice(0, 3)
+                                        .map(zone => (
+                                            <TouchableOpacity
+                                                key={zone.id}
+                                                style={styles.suggestionItem}
+                                                onPress={() => setDestZone(zone.name)}
+                                            >
+                                                <Text style={styles.suggestionText}>{zone.name}</Text>
+                                            </TouchableOpacity>
+                                        ))
+                                    }
+                                </View>
+                            )}
                         </View>
 
                         <View style={styles.modalButtons}>
@@ -772,6 +943,17 @@ export default function RequestRideScreen() {
                                 <Text style={styles.requestButtonText}>Confirmar</Text>
                             </TouchableOpacity>
                         </View>
+
+                        <TouchableOpacity
+                            style={styles.selectOnMapOption}
+                            onPress={() => {
+                                setShowDestModal(false);
+                                setIsSelectingOnMap(true);
+                            }}
+                        >
+                            <Ionicons name="map-outline" size={20} color={BrandColors.primary} />
+                            <Text style={styles.selectOnMapText}>Seleccionar ubicación en el mapa</Text>
+                        </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
@@ -1076,5 +1258,83 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
         marginBottom: 4,
+    },
+    // Suggestions
+    suggestionsContainer: {
+        backgroundColor: '#f8fafc',
+        borderRadius: 10,
+        marginTop: 4,
+        borderWidth: 1,
+        borderColor: BrandColors.gray[200],
+    },
+    suggestionItem: {
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: BrandColors.gray[100],
+    },
+    suggestionText: {
+        fontSize: 14,
+        color: BrandColors.gray[800],
+    },
+    // Map selection
+    mapSelectionOverlay: {
+        position: 'absolute',
+        top: 100,
+        left: 20,
+        right: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderRadius: 16,
+        padding: 16,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 10,
+    },
+    selectionHint: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: BrandColors.gray[700],
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    confirmSelectionButton: {
+        backgroundColor: BrandColors.primary,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 12,
+        width: '100%',
+        alignItems: 'center',
+    },
+    confirmSelectionButtonText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    selectOnMapOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 16,
+        marginTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: BrandColors.gray[100],
+    },
+    selectOnMapText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: BrandColors.primary,
+    },
+    // New styles for refined UI
+    selectionSubHint: {
+        fontSize: 12,
+        color: BrandColors.gray[500],
+        marginTop: 2,
+    },
+    confirmSelectionContainer: {
+        paddingVertical: 10,
     },
 });

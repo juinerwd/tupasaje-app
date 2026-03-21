@@ -72,7 +72,10 @@ class RidesSocketService {
 
         this.socket = io(`${SOCKET_URL}/rides`, {
             auth: { token },
-            transports: ['websocket'],
+            transports: ['polling', 'websocket'], // Start with polling for better compatibility, then upgrade
+            extraHeaders: {
+                "ngrok-skip-browser-warning": "true"
+            },
             reconnection: true,
             reconnectionAttempts: 10,
             reconnectionDelay: 1000,
@@ -82,8 +85,8 @@ class RidesSocketService {
             console.log('RidesSocket: Connected');
         });
 
-        this.socket.on('disconnect', (reason) => {
-            console.log('RidesSocket: Disconnected -', reason);
+        this.socket.on('disconnect', (reason, description) => {
+            console.log(`RidesSocket: Disconnected - Reason: ${reason}${description ? ` (${JSON.stringify(description)})` : ''}`);
         });
 
         this.socket.on('connect_error', async (error) => {

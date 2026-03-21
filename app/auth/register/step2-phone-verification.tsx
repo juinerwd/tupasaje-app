@@ -1,4 +1,4 @@
-import { Button, ErrorMessage, Input, PinInput } from '@/components/ui';
+import { Button, ErrorMessage, Input, PinDisplay } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import { useRegistration } from '@/hooks/useRegistration';
 import { PhoneVerificationFormData, phoneVerificationSchema } from '@/utils/validation';
@@ -12,6 +12,9 @@ import {
     StyleSheet,
     Text,
     View,
+    TextInput,
+    LayoutAnimation,
+    Keyboard,
 } from 'react-native';
 
 export default function Step2PhoneVerification() {
@@ -29,6 +32,27 @@ export default function Step2PhoneVerification() {
     const [codeSent, setCodeSent] = useState(false);
     const [localCode, setLocalCode] = useState('');
     const [localVerifyError, setLocalVerifyError] = useState<string | null>(null);
+    const scrollViewRef = React.useRef<ScrollView>(null);
+
+    React.useEffect(() => {
+        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+        const showSub = Keyboard.addListener(showEvent, () => {
+            // Desplazar basado en si estamos pidiendo el numero o el codigo
+            const offsetY = codeSent ? 160 : 50; 
+            scrollViewRef.current?.scrollTo({ y: offsetY, animated: true });
+        });
+
+        const hideSub = Keyboard.addListener(hideEvent, () => {
+            scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+        });
+
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, [codeSent]);
 
     const {
         control,
@@ -46,6 +70,7 @@ export default function Step2PhoneVerification() {
             setLocalVerifyError(null);
             setPhone(data.phone);
 
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             // TEMPORAL: Simular envío de código mientras no hay backend
             setTimeout(() => {
                 setCodeSent(true);
@@ -56,34 +81,45 @@ export default function Step2PhoneVerification() {
         }
     };
 
-    const handleVerifyCode = async () => {
-        if (localCode.length !== 6) return;
-        setLocalVerifyError(null);
+    const handleCodeChange = (text: string) => {
+        const numericValue = text.replace(/[^0-9]/g, '');
+        setLocalCode(numericValue);
 
+        if (localVerifyError || verifyCodeError) {
+            setLocalVerifyError(null);
+        }
+
+        if (numericValue.length === 6) {
+            setTimeout(() => executeVerify(numericValue), 50);
+        }
+    };
+
+    const executeVerify = async (code: string) => {
+        setLocalVerifyError(null);
         try {
-            setVerificationCode(localCode);
+            setVerificationCode(code);
 
             // TEMPORAL: Verificar código de prueba
             const TEST_CODE = '123456';
 
-            if (localCode === TEST_CODE) {
-                // Código correcto
+            if (code === TEST_CODE) {
                 setTimeout(() => {
                     nextStep();
                 }, 300);
             } else {
-                // Código incorrecto - Seteamos el error local en lugar de lanzarlo
                 setLocalVerifyError('Código incorrecto. Usa: 123456');
+                setLocalCode('');
             }
         } catch (error: any) {
-            console.error('Error verifying code:', error);
             setLocalVerifyError(error.message || 'Error al verificar código');
+            setLocalCode('');
         }
     };
 
     const handleResendCode = () => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setLocalCode('');
-        handleSendCode({ phone });
+        setCodeSent(false); // Go back to sending state
     };
 
     return (
@@ -93,12 +129,15 @@ export default function Step2PhoneVerification() {
             keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
         >
             <ScrollView
+                ref={scrollViewRef}
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
             >
                 <View style={styles.content}>
                     {/* Title */}
                     <Text style={styles.title}>Verifica tu número</Text>
+                    
                     <Text style={styles.subtitle}>
                         {!codeSent
                             ? 'Ingresa tu número de teléfono para recibir un código de verificación'
@@ -115,11 +154,15 @@ export default function Step2PhoneVerification() {
                                     <Input
                                         label="Número de teléfono"
                                         placeholder="3001234567"
-                                        keyboardType="phone-pad"
+                                        keyboardType="numeric"
+                                        inputMode="numeric"
                                         maxLength={10}
                                         leftIcon="call-outline"
                                         value={value}
-                                        onChangeText={onChange}
+                                        onChangeText={(text) => {
+                                            const numericValue = text.replace(/[^0-9]/g, '');
+                                            onChange(numericValue);
+                                        }}
                                         onBlur={onBlur}
                                         error={errors.phone?.message}
                                     />
@@ -160,35 +203,33 @@ export default function Step2PhoneVerification() {
                                 </Text>
                             </View>
 
-                            <PinInput
-                                label="Código de verificación"
-                                value={localCode}
-                                onChange={setLocalCode}
-                                secureTextEntry={false}
-                            />
-
-                            {(verifyCodeError || localVerifyError) && (
-                                <ErrorMessage
-                                    message={
-                                        localVerifyError ||
-                                        (verifyCodeError instanceof Error
-                                            ? verifyCodeError.message
-                                            : 'Código inválido')
-                                    }
+                            <View style={styles.pinContainer}>
+                                <TextInput
+                                    value={localCode}
+                                    onChangeText={handleCodeChange}
+                                    keyboardType="numeric"
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                    autoFocus
+                                    caretHidden
+                                    style={styles.hiddenInput}
                                 />
-                            )}
+                                <PinDisplay value={localCode} length={6} isError={!!(verifyCodeError || localVerifyError)} />
+                                {(verifyCodeError || localVerifyError) && (
+                                    <ErrorMessage
+                                        message={
+                                            localVerifyError ||
+                                            (verifyCodeError instanceof Error
+                                                ? verifyCodeError.message
+                                                : 'Código inválido')
+                                        }
+                                        style={{ marginTop: 16 }}
+                                    />
+                                )}
+                            </View>
 
                             <Button
-                                title="Verificar código"
-                                onPress={handleVerifyCode}
-                                loading={isVerifyingCode}
-                                disabled={isVerifyingCode || localCode.length !== 6}
-                                fullWidth
-                                size="large"
-                            />
-
-                            <Button
-                                title="Reenviar código"
+                                title="Cambiar número"
                                 onPress={handleResendCode}
                                 variant="ghost"
                                 fullWidth
@@ -216,16 +257,19 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     title: {
-        fontSize: 24,
+        fontSize: 28,
         fontWeight: 'bold',
         color: BrandColors.gray[900],
-        marginBottom: 8,
+        marginBottom: 12,
+        textAlign: 'center',
     },
     subtitle: {
         fontSize: 16,
         color: BrandColors.gray[600],
         marginBottom: 32,
         lineHeight: 24,
+        textAlign: 'center',
+        paddingHorizontal: 8,
     },
     phoneDisplay: {
         backgroundColor: BrandColors.gray[100],
@@ -266,5 +310,17 @@ const styles = StyleSheet.create({
     },
     resendButton: {
         marginTop: 16,
+    },
+    pinContainer: {
+        marginBottom: 32,
+        alignItems: 'center',
+        position: 'relative',
+    },
+    hiddenInput: {
+        position: 'absolute',
+        width: '100%',
+        height: '100%',
+        opacity: 0,
+        zIndex: 10,
     },
 });

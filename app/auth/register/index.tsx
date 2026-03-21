@@ -52,22 +52,25 @@ export default function RegisterScreen() {
         <SafeAreaView style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={handleBack}
-                >
-                    <Ionicons
-                        name="arrow-back"
-                        size={24}
-                        color={BrandColors.gray[900]}
-                    />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Registro</Text>
-                <View style={styles.placeholder} />
-            </View>
+                <View style={styles.leftHeader}>
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={handleBack}
+                    >
+                        <Ionicons
+                            name="arrow-back"
+                            size={24}
+                            color={BrandColors.primary} // Blue in the image, close to primary brand color
+                        />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Tu Pasaje</Text>
+                </View>
 
-            {/* Progress Bar */}
-            <ProgressBar steps={5} currentStep={currentStep} />
+                <View style={styles.rightHeader}>
+                    <View style={styles.stepDot} />
+                    <Text style={styles.stepText}>PASO {currentStep} DE 5</Text>
+                </View>
+            </View>
 
             {/* Step Content */}
             <View style={styles.content}>
@@ -88,19 +91,37 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: BrandColors.gray[200],
+        backgroundColor: 'transparent',
+    },
+    leftHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     backButton: {
         padding: 8,
+        marginRight: 4,
     },
     headerTitle: {
         fontSize: 18,
-        fontWeight: '600',
-        color: BrandColors.gray[900],
+        fontWeight: 'bold',
+        color: BrandColors.gray[900], // or a specific blue if BrandColors has it
     },
-    placeholder: {
-        width: 40,
+    rightHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    stepDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#9A6324', // brownish orange from the image
+        marginRight: 6,
+    },
+    stepText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: BrandColors.gray[500],
+        letterSpacing: 1,
     },
     content: {
         flex: 1,
