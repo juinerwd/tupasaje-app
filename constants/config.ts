@@ -24,4 +24,7 @@ export const storageKeys = {
     userProfile: 'user_profile',
     sessionId: 'session_id',
     emergencyCode: 'emergency_code',
+    biometricsEnabled: 'biometrics_enabled',
+    biometricsCredentials: 'biometrics_credentials',
+    lastPhoneNumber: 'last_phone_number',
 };

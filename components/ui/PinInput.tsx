@@ -18,6 +18,8 @@ interface PinInputProps {
     label?: string;
     secureTextEntry?: boolean;
     autoFocus?: boolean;
+    editable?: boolean;
+    showSoftInputOnFocus?: boolean;
 }
 
 export function PinInput({
@@ -29,6 +31,8 @@ export function PinInput({
     label,
     secureTextEntry = true,
     autoFocus = false,
+    editable = true,
+    showSoftInputOnFocus = true,
 }: PinInputProps) {
     const inputRefs = useRef<(TextInput | null)[]>([]);
     const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
@@ -111,6 +115,8 @@ export function PinInput({
                         keyboardType="number-pad"
                         maxLength={1}
                         secureTextEntry={secureTextEntry}
+                        showSoftInputOnFocus={showSoftInputOnFocus}
+                        editable={editable}
                         selectTextOnFocus
                     />
                 ))}

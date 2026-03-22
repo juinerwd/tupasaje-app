@@ -6,15 +6,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
+    Keyboard,
     KeyboardAvoidingView,
+    LayoutAnimation,
     Platform,
     ScrollView,
     StyleSheet,
     Text,
-    View,
     TextInput,
-    LayoutAnimation,
-    Keyboard,
+    View,
 } from 'react-native';
 
 export default function Step2PhoneVerification() {
@@ -40,7 +40,8 @@ export default function Step2PhoneVerification() {
 
         const showSub = Keyboard.addListener(showEvent, () => {
             // Desplazar basado en si estamos pidiendo el numero o el codigo
-            const offsetY = codeSent ? 160 : 50; 
+            // Aumentamos el offset para que el PinDisplay no quede oculto por el teclado
+            const offsetY = codeSent ? 280 : 80;
             scrollViewRef.current?.scrollTo({ y: offsetY, animated: true });
         });
 
@@ -137,7 +138,7 @@ export default function Step2PhoneVerification() {
                 <View style={styles.content}>
                     {/* Title */}
                     <Text style={styles.title}>Verifica tu número</Text>
-                    
+
                     <Text style={styles.subtitle}>
                         {!codeSent
                             ? 'Ingresa tu número de teléfono para recibir un código de verificación'
@@ -251,7 +252,7 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         paddingHorizontal: 24,
         paddingTop: 32,
-        paddingBottom: Platform.OS === 'android' ? 100 : 40,
+        paddingBottom: Platform.OS === 'android' ? 300 : 150, // Mayor espacio para permitir scroll con teclado
     },
     content: {
         flex: 1,
@@ -309,7 +310,7 @@ const styles = StyleSheet.create({
         fontFamily: 'monospace',
     },
     resendButton: {
-        marginTop: 16,
+        marginTop: 10,
     },
     pinContainer: {
         marginBottom: 32,

@@ -1,6 +1,6 @@
 import { QRCodeModal } from '@/components/QRCodeModal';
 import { VerificationBanner } from '@/components/shared/VerificationBanner';
-import { Card, ProgressBar, Skeleton } from '@/components/ui';
+import { Card, ProgressBar, Skeleton, TransactionItem } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import { useUnreadNotificationsCount } from '@/hooks/useNotifications';
 import { usePassengerProfile, useUpdatePassengerProfile } from '@/hooks/usePassenger';
@@ -9,7 +9,7 @@ import { useClaimPromotion, usePromotions } from '@/hooks/usePromotions';
 import { useWalletTransactions } from '@/hooks/useRecharge';
 import { useWalletBalance } from '@/hooks/useWallet';
 import { useAuthStore } from '@/store/authStore';
-import { TransactionStatus, TransactionType } from '@/types';
+import { Transaction, TransactionStatus, TransactionType } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -250,7 +250,6 @@ export default function PassengerDashboard() {
                     />
                 }
             >
-                <VerificationBanner />
                 {/* Header */}
                 <Animated.View
                     entering={FadeInDown.duration(600).springify()}
@@ -364,6 +363,8 @@ export default function PassengerDashboard() {
                     <View style={styles.decorativeCircle1} />
                     <View style={styles.decorativeCircle2} />
                 </AnimatedLinearGradient>
+
+                <VerificationBanner />
 
                 {/* Low Balance Warning */}
                 {isLowBalance && (
@@ -800,57 +801,17 @@ export default function PassengerDashboard() {
                     ) : recentTransactions.length === 0 ? (
                         <Text style={styles.emptyText}>No hay transacciones recientes</Text>
                     ) : (
-                        recentTransactions.map((transaction, index) => {
-                            const isIncoming = transaction.type === TransactionType.RECHARGE || transaction.type === TransactionType.REFUND;
-                            const amount = parseFloat(transaction.amount);
-                            const formattedDate = new Date(transaction.createdAt).toLocaleDateString('es-CO');
-
-                            return (
-                                <Animated.View
-                                    key={transaction.id}
-                                    entering={FadeInRight.delay(1400 + index * 100).duration(600).springify()}
-                                >
-                                    <Card variant="outlined" style={styles.transactionCard}>
-                                        <View style={styles.transactionContent}>
-                                            <View style={styles.transactionLeft}>
-                                                <LinearGradient
-                                                    colors={
-                                                        isIncoming
-                                                            ? ['#d1fae5', '#a7f3d0']
-                                                            : ['#fee2e2', '#fecaca']
-                                                    }
-                                                    style={styles.transactionIcon}
-                                                >
-                                                    <Ionicons
-                                                        name={isIncoming ? 'arrow-down' : 'arrow-up'}
-                                                        size={20}
-                                                        color={isIncoming ? BrandColors.success : BrandColors.error}
-                                                    />
-                                                </LinearGradient>
-                                                <View>
-                                                    <Text style={styles.transactionType}>{transaction.type}</Text>
-                                                    <Text style={styles.transactionDescription}>
-                                                        {transaction.description || 'Sin descripción'}
-                                                    </Text>
-                                                    <Text style={styles.transactionDate}>{formattedDate}</Text>
-                                                </View>
-                                            </View>
-                                            <Text
-                                                style={[
-                                                    styles.transactionAmount,
-                                                    isIncoming
-                                                        ? styles.transactionAmountPositive
-                                                        : styles.transactionAmountNegative,
-                                                ]}
-                                            >
-                                                {isIncoming ? '+' : '-'}
-                                                {formatCurrency(Math.abs(amount))}
-                                            </Text>
-                                        </View>
-                                    </Card>
-                                </Animated.View>
-                            );
-                        })
+                        recentTransactions.map((transaction: Transaction, index: number) => (
+                            <Animated.View
+                                key={transaction.id}
+                                entering={FadeInRight.delay(1400 + index * 100).duration(600).springify()}
+                            >
+                                <TransactionItem
+                                    transaction={transaction}
+                                    currentUserId={user?.id?.toString()}
+                                />
+                            </Animated.View>
+                        ))
                     )}
                 </View>
 
@@ -1401,50 +1362,6 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
-    },
-    transactionContent: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    transactionLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    transactionIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 14,
-    },
-    transactionType: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: BrandColors.gray[900],
-        marginBottom: 4,
-    },
-    transactionDescription: {
-        fontSize: 14,
-        color: BrandColors.gray[600],
-        marginBottom: 2,
-    },
-    transactionDate: {
-        fontSize: 12,
-        color: BrandColors.gray[500],
-    },
-    transactionAmount: {
-        fontSize: 17,
-        fontWeight: 'bold',
-        letterSpacing: -0.3,
-    },
-    transactionAmountPositive: {
-        color: BrandColors.success,
-    },
-    transactionAmountNegative: {
-        color: BrandColors.error,
     },
     emptyText: {
         textAlign: 'center',

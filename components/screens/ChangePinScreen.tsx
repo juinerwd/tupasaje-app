@@ -1,5 +1,6 @@
-import { PinInput } from '@/components/ui';
+import { NumericKeypad, PinInput } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
+import { useAuth } from '@/hooks/useAuth';
 import * as authService from '@/services/authService';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -20,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ChangePinScreen() {
     const router = useRouter();
+    const { logout, logoutAsync } = useAuth();
     const [step, setStep] = useState(1); // 1: Current, 2: New, 3: Confirm
     const [currentPin, setCurrentPin] = useState('');
     const [newPin, setNewPin] = useState('');
@@ -52,8 +54,21 @@ export default function ChangePinScreen() {
             });
 
             if (response.success) {
-                Alert.alert('Éxito', 'Tu PIN ha sido actualizado correctamente.', [
-                    { text: 'OK', onPress: () => router.back() }
+                // Cerramos todas las sesiones antes de informar al usuario
+                try {
+                    await authService.revokeAllSessions();
+                } catch (err) {
+                    console.error('Error revoking all sessions:', err);
+                }
+
+                Alert.alert('Éxito', 'Tu PIN ha sido actualizado correctamente. Por seguridad, debes ingresar nuevamente con tu nuevo PIN.', [
+                    {
+                        text: 'Aceptar',
+                        onPress: async () => {
+                            await logoutAsync({ reason: 'manual' });
+                            // El hook useLogout ya maneja la redirección al limpiar el estado de auth
+                        }
+                    }
                 ]);
             }
         } catch (error: any) {
@@ -73,6 +88,36 @@ export default function ChangePinScreen() {
         }
     };
 
+    const handleKeyPress = (key: string) => {
+        let currentVal = '';
+        let setVal: (val: string) => void;
+        let onComplete: (val: string) => void = () => { };
+
+        if (step === 1) {
+            currentVal = currentPin;
+            setVal = setCurrentPin;
+            onComplete = handleCurrentPinComplete;
+        } else if (step === 2) {
+            currentVal = newPin;
+            setVal = setNewPin;
+            onComplete = handleNewPinComplete;
+        } else {
+            currentVal = confirmPin;
+            setVal = setConfirmPin;
+            onComplete = handleConfirmPinComplete;
+        }
+
+        if (key === 'backspace') {
+            setVal(currentVal.slice(0, -1));
+        } else if (currentVal.length < 6) {
+            const newVal = currentVal + key;
+            setVal(newVal);
+            if (newVal.length === 6) {
+                onComplete(newVal);
+            }
+        }
+    };
+
     const renderStep = () => {
         switch (step) {
             case 1:
@@ -85,8 +130,12 @@ export default function ChangePinScreen() {
                             value={currentPin}
                             onChange={setCurrentPin}
                             onComplete={handleCurrentPinComplete}
+                            showSoftInputOnFocus={false}
                             autoFocus
                         />
+                        <View style={styles.keypadWrapper}>
+                            <NumericKeypad onPress={handleKeyPress} />
+                        </View>
                     </Animated.View>
                 );
             case 2:
@@ -99,8 +148,12 @@ export default function ChangePinScreen() {
                             value={newPin}
                             onChange={setNewPin}
                             onComplete={handleNewPinComplete}
+                            showSoftInputOnFocus={false}
                             autoFocus
                         />
+                        <View style={styles.keypadWrapper}>
+                            <NumericKeypad onPress={handleKeyPress} />
+                        </View>
                         <TouchableOpacity style={styles.backStepButton} onPress={() => setStep(1)}>
                             <Text style={styles.backStepText}>Volver</Text>
                         </TouchableOpacity>
@@ -116,8 +169,12 @@ export default function ChangePinScreen() {
                             value={confirmPin}
                             onChange={setConfirmPin}
                             onComplete={handleConfirmPinComplete}
+                            showSoftInputOnFocus={false}
                             autoFocus
                         />
+                        <View style={styles.keypadWrapper}>
+                            <NumericKeypad onPress={handleKeyPress} />
+                        </View>
                         <TouchableOpacity style={styles.backStepButton} onPress={() => setStep(2)}>
                             <Text style={styles.backStepText}>Volver</Text>
                         </TouchableOpacity>
@@ -251,5 +308,9 @@ const styles = StyleSheet.create({
         marginTop: 16,
         fontSize: 16,
         color: BrandColors.gray[600],
+    },
+    keypadWrapper: {
+        width: '100%',
+        marginTop: 20,
     },
 });

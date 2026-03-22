@@ -19,6 +19,15 @@ import Step3PersonalData from './step3-personal-data';
 import Step4PinCreation from './step4-pin-creation';
 import Step5Summary from './step5-summary';
 
+const BackgroundShapes = () => (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={[styles.shape, styles.shape1]} />
+        <View style={[styles.shape, styles.shape2]} />
+        <View style={[styles.shape, styles.shape3]} />
+        <View style={[styles.shape, styles.shape4]} />
+    </View>
+);
+
 export default function RegisterScreen() {
     const router = useRouter();
     const { currentStep, previousStep, canProceedToStep } = useRegistrationStore();
@@ -50,6 +59,7 @@ export default function RegisterScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
+            <BackgroundShapes />
             {/* Header */}
             <View style={styles.header}>
                 <View style={styles.leftHeader}>
@@ -125,5 +135,46 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
+    },
+    /* Background Shapes */
+    shape: {
+        position: 'absolute',
+    },
+    shape1: {
+        width: 300,
+        height: 300,
+        borderRadius: 150,
+        backgroundColor: BrandColors.primary,
+        opacity: 0.05,
+        top: -100,
+        right: -80,
+    },
+    shape2: {
+        width: 250,
+        height: 250,
+        borderRadius: 125,
+        backgroundColor: BrandColors.secondary,
+        opacity: 0.06,
+        bottom: 40,
+        left: -100,
+    },
+    shape3: {
+        width: 150,
+        height: 150,
+        borderRadius: 10,
+        backgroundColor: BrandColors.primary,
+        opacity: 0.04,
+        top: '40%',
+        right: -60,
+        transform: [{ rotate: '45deg' }],
+    },
+    shape4: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: BrandColors.primary,
+        opacity: 0.03,
+        top: 100,
+        left: 20,
     },
 });

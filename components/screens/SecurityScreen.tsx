@@ -3,7 +3,9 @@ import { BrandColors } from '@/constants/theme';
 import * as authService from '@/services/authService';
 import { useAuthStore } from '@/store/authStore';
 import { AuthSession, UserRole } from '@/types';
+import { getBiometricsEnabled, saveBiometricsEnabled } from '@/utils/secureStorage';
 import { Ionicons } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -46,11 +48,18 @@ export default function SecurityScreen() {
 
     useEffect(() => {
         fetchSessions();
+        loadBiometricsPreference();
     }, [fetchSessions]);
+
+    const loadBiometricsPreference = async () => {
+        const enabled = await getBiometricsEnabled();
+        setIsBiometricsEnabled(enabled);
+    };
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         await fetchSessions();
+        await loadBiometricsPreference();
         setRefreshing(false);
     }, [fetchSessions]);
 
@@ -162,7 +171,32 @@ export default function SecurityScreen() {
                                 <Text style={styles.menuItemSubtitle}>Usa tu huella o rostro para entrar</Text>
                             </View>
                             <TouchableOpacity
-                                onPress={() => setIsBiometricsEnabled(!isBiometricsEnabled)}
+                                onPress={async () => {
+                                    const newValue = !isBiometricsEnabled;
+                                    
+                                    if (newValue) {
+                                        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+                                        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+                                        
+                                        if (!hasHardware || !isEnrolled) {
+                                            Alert.alert(
+                                                'Biometría no disponible', 
+                                                'Tu dispositivo no soporta biometría o no tiene huellas/rostro registrados.'
+                                            );
+                                            return;
+                                        }
+
+                                        const result = await LocalAuthentication.authenticateAsync({
+                                            promptMessage: 'Confirma tu identidad para habilitar biometría',
+                                            fallbackLabel: 'Usar PIN',
+                                        });
+
+                                        if (!result.success) return;
+                                    }
+
+                                    setIsBiometricsEnabled(newValue);
+                                    await saveBiometricsEnabled(newValue);
+                                }}
                                 style={[
                                     styles.toggleContainer,
                                     isBiometricsEnabled && styles.toggleContainerActive

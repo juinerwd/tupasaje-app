@@ -117,3 +117,88 @@ export async function clearEmergencyCode(): Promise<void> {
         console.error('Error clearing emergency code:', error);
     }
 }
+
+/**
+ * Save biometrics enabled status
+ */
+export async function saveBiometricsEnabled(enabled: boolean): Promise<void> {
+    try {
+        await SecureStore.setItemAsync(storageKeys.biometricsEnabled, enabled ? 'true' : 'false');
+    } catch (error) {
+        console.error('Error saving biometrics preference:', error);
+    }
+}
+
+/**
+ * Get biometrics enabled status
+ */
+export async function getBiometricsEnabled(): Promise<boolean> {
+    try {
+        const enabled = await SecureStore.getItemAsync(storageKeys.biometricsEnabled);
+        return enabled === 'true';
+    } catch (error) {
+        console.error('Error getting biometrics preference:', error);
+        return false;
+    }
+}
+
+/**
+ * Save credentials for biometrics login
+ */
+export async function saveBiometricsCredentials(phoneNumber: string, pin: string): Promise<void> {
+    try {
+        const data = JSON.stringify({ phoneNumber, pin });
+        await SecureStore.setItemAsync(storageKeys.biometricsCredentials, data);
+    } catch (error) {
+        console.error('Error saving biometrics credentials:', error);
+    }
+}
+
+/**
+ * Get credentials for biometrics login
+ */
+export async function getBiometricsCredentials(): Promise<{ phoneNumber: string, pin: string } | null> {
+    try {
+        const data = await SecureStore.getItemAsync(storageKeys.biometricsCredentials);
+        if (!data) return null;
+        return JSON.parse(data);
+    } catch (error) {
+        console.error('Error getting biometrics credentials:', error);
+        return null;
+    }
+}
+
+/**
+ * Clear all biometrics related data
+ */
+export async function clearBiometricsData(): Promise<void> {
+    try {
+        await SecureStore.deleteItemAsync(storageKeys.biometricsEnabled);
+        await SecureStore.deleteItemAsync(storageKeys.biometricsCredentials);
+    } catch (error) {
+        console.error('Error clearing biometrics data:', error);
+    }
+}
+
+/**
+ * Save last phone number used to login
+ */
+export async function saveLastPhoneNumber(phone: string): Promise<void> {
+    try {
+        await SecureStore.setItemAsync(storageKeys.lastPhoneNumber, phone);
+    } catch (error) {
+        console.error('Error saving last phone number:', error);
+    }
+}
+
+/**
+ * Get last phone number used to login
+ */
+export async function getLastPhoneNumber(): Promise<string | null> {
+    try {
+        return await SecureStore.getItemAsync(storageKeys.lastPhoneNumber);
+    } catch (error) {
+        console.error('Error getting last phone number:', error);
+        return null;
+    }
+}

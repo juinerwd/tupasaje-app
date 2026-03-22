@@ -1,14 +1,18 @@
 import { Button, ErrorMessage, Input, NumericKeypad, PinDisplay } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
+import { clearBiometricsData, getBiometricsCredentials, getBiometricsEnabled, getLastPhoneNumber, saveBiometricsCredentials, saveLastPhoneNumber } from '@/utils/secureStorage';
 import { LoginFormData, loginSchema } from '@/utils/validation';
 import { Ionicons } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
+    Alert,
     Animated,
     Keyboard,
     KeyboardAvoidingView,
@@ -22,15 +26,38 @@ import {
     View,
 } from 'react-native';
 
+const BackgroundShapes = () => (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={[styles.shape, styles.shape1]} />
+        <View style={[styles.shape, styles.shape2]} />
+        <View style={[styles.shape, styles.shape3]} />
+        <View style={[styles.shape, styles.shape4]} />
+    </View>
+);
+
 export default function LoginScreen() {
     const router = useRouter();
     const { login, isLoggingIn, loginError, resetLogin } = useAuth();
+    const { logoutReason, clearLogoutReason } = useAuthStore();
 
     const [step, setStep] = useState<1 | 2>(1);
     const [pin, setPin] = useState('');
     const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
     useEffect(() => {
+        const loadInitialData = async () => {
+            const lastPhone = await getLastPhoneNumber();
+            if (lastPhone) {
+                reset({ phoneNumber: lastPhone });
+            }
+        };
+        loadInitialData();
+        
+        // Clear logout reason
+        if (logoutReason) {
+            clearLogoutReason();
+        }
+
         const showSub = Keyboard.addListener(
             Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
             () => {
@@ -51,11 +78,79 @@ export default function LoginScreen() {
         };
     }, []);
 
+    const checkBiometrics = async (isManualClick = false) => {
+        const isEnabled = await getBiometricsEnabled();
+        
+        if (!isEnabled) {
+            if (isManualClick) {
+                Alert.alert('Biometría no activada', 'Actívala en Configuración > Seguridad después de iniciar sesión.');
+            }
+            return;
+        }
+
+        const credentials = await getBiometricsCredentials();
+        if (!credentials) {
+            if (isManualClick) {
+                Alert.alert('Error de acceso', 'No se encontraron registros de biometría válidos en este dispositivo.');
+            }
+            return;
+        }
+
+        // VALIDACIÓN CRÍTICA DE SEGURIDAD:
+        // El número ingresado debe coincidir con el número registrado para biometría
+        const { phoneNumber } = getValues();
+        if (phoneNumber.trim() !== credentials.phoneNumber.trim()) {
+            if (isManualClick) {
+                Alert.alert(
+                    'Usuario diferente',
+                    'La huella dactilar guardada en este dispositivo pertenece a otro número de teléfono. Por favor, ingresa tu clave manualmente.'
+                );
+            }
+            return;
+        }
+
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (hasHardware && isEnrolled) {
+            const result = await LocalAuthentication.authenticateAsync({
+                promptMessage: 'Accede con tu huella o rostro',
+                fallbackLabel: 'Usar PIN',
+            });
+
+            if (result.success) {
+                // Auto login with stored credentials
+                login(credentials, {
+                    onSuccess: (result) => {
+                        const user = result.user;
+                        if (user.role === UserRole.PASSENGER) {
+                            router.replace('/passenger/dashboard');
+                        } else if (user.role === UserRole.DRIVER) {
+                            router.replace('/conductor/dashboard');
+                        } else {
+                            router.replace('/passenger/dashboard');
+                        }
+                    },
+                    onError: async (error: any) => {
+                        // If credentials are now invalid (e.g. PIN changed), clear biometrics
+                        if (error.message?.toLowerCase().includes('inválid') || error.message?.toLowerCase().includes('pin')) {
+                            await clearBiometricsData();
+                        }
+                    }
+                });
+            }
+        } else if (isManualClick) {
+            Alert.alert('Hardware no disponible', 'Tu dispositivo no cuenta con biometría configurada o activa.');
+        }
+    };
+
     const {
         control,
         handleSubmit,
         trigger,
         getValues,
+        setValue,
+        reset,
         formState: { errors },
     } = useForm<LoginFormData>({
         resolver: zodResolver(loginSchema),
@@ -67,6 +162,9 @@ export default function LoginScreen() {
     const handleNextStep = async () => {
         const isValid = await trigger('phoneNumber');
         if (isValid) {
+            const phoneVal = getValues('phoneNumber');
+            await saveLastPhoneNumber(phoneVal);
+            
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             setStep(2);
             resetLogin();
@@ -115,7 +213,16 @@ export default function LoginScreen() {
         login(
             { phoneNumber, pin: currentPin },
             {
-                onSuccess: (result) => {
+                onSuccess: async (result) => {
+                    // Update last phone number
+                    await saveLastPhoneNumber(phoneNumber);
+
+                    // If biometrics is enabled, store credentials for next time
+                    const isEnabled = await getBiometricsEnabled();
+                    if (isEnabled) {
+                        await saveBiometricsCredentials(phoneNumber, currentPin);
+                    }
+
                     const user = result.user;
                     if (user.role === UserRole.PASSENGER) {
                         router.replace('/passenger/dashboard');
@@ -142,6 +249,7 @@ export default function LoginScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
         >
+            <BackgroundShapes />
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
@@ -227,7 +335,15 @@ export default function LoginScreen() {
 
                         <Text style={styles.pinTitle}>Ingresa tu clave</Text>
 
-                        <PinDisplay length={6} value={pin} isError={!!loginError} />
+                        <View style={styles.pinDisplayWrapper}>
+                            <PinDisplay length={6} value={pin} isError={!!loginError} />
+                            <TouchableOpacity 
+                                style={styles.manualBiometricBtn} 
+                                onPress={() => checkBiometrics(true)}
+                            >
+                                <Ionicons name="finger-print" size={32} color={BrandColors.primary} />
+                            </TouchableOpacity>
+                        </View>
 
                         {loginError && (
                             <View style={styles.errorContainer}>
@@ -413,5 +529,57 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: BrandColors.primary,
         fontWeight: '600',
+    },
+    pinDisplayWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        paddingLeft: 44, // Compensation for biometric icon
+    },
+    manualBiometricBtn: {
+        padding: 8,
+        marginLeft: 12,
+    },
+    /* Background Shapes */
+    shape: {
+        position: 'absolute',
+    },
+    shape1: {
+        width: 300,
+        height: 300,
+        borderRadius: 150,
+        backgroundColor: BrandColors.primary,
+        opacity: 0.05,
+        top: -100,
+        right: -80,
+    },
+    shape2: {
+        width: 250,
+        height: 250,
+        borderRadius: 125,
+        backgroundColor: BrandColors.secondary,
+        opacity: 0.06,
+        bottom: 40,
+        left: -100,
+    },
+    shape3: {
+        width: 150,
+        height: 150,
+        borderRadius: 10,
+        backgroundColor: BrandColors.primary,
+        opacity: 0.04,
+        top: '40%',
+        right: -60,
+        transform: [{ rotate: '45deg' }],
+    },
+    shape4: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: BrandColors.primary,
+        opacity: 0.03,
+        top: 100,
+        left: 20,
     },
 });

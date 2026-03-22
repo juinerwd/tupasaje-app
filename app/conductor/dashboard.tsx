@@ -2,7 +2,7 @@ import { EmergencyPaymentModal } from '@/components/EmergencyPaymentModal';
 import { GeneratePaymentQRModal } from '@/components/GeneratePaymentQRModal';
 import { QRCodeModal } from '@/components/QRCodeModal';
 import { VerificationBanner } from '@/components/shared/VerificationBanner';
-import { Card, ProgressBar, Skeleton } from '@/components/ui';
+import { Card, ProgressBar, Skeleton, TransactionItem } from '@/components/ui';
 import ButtonAction from '@/components/ui/ButtonAction';
 import { WithdrawalModal } from '@/components/WithdrawalModal';
 import { BrandColors } from '@/constants/theme';
@@ -11,7 +11,7 @@ import { useUnreadNotificationsCount } from '@/hooks/useNotifications';
 import { useProfileCompleteness } from '@/hooks/useProfile';
 import { useWalletDetails } from '@/hooks/useWallet';
 import { useAuthStore } from '@/store/authStore';
-import { Transaction, TransactionStatus, TransactionType } from '@/types';
+import { Transaction, TransactionStatus } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -468,52 +468,17 @@ export default function ConductorDashboard() {
                             <Skeleton key={i} height={70} style={{ marginBottom: 12, borderRadius: 16 }} />
                         ))
                     ) : recentTransactions.length > 0 ? (
-                        recentTransactions.map((tx: Transaction, index: number) => {
-                            const isWithdrawal = tx.type === TransactionType.WITHDRAWAL || (tx.type === TransactionType.TRANSFER && tx.fromUserId === user?.id);
-                            const amount = parseFloat(tx.amount);
-
-                            return (
-                                <Animated.View
-                                    key={tx.id}
-                                    entering={FadeInUp.delay(800 + index * 100).duration(500)}
-                                >
-                                    <Card variant="elevated" style={styles.transactionItem}>
-                                        <LinearGradient
-                                            colors={
-                                                isWithdrawal
-                                                    ? [BrandColors.warning + '20', BrandColors.warning + '05']
-                                                    : [BrandColors.success + '20', BrandColors.success + '05']
-                                            }
-                                            style={styles.txIconContainer}
-                                        >
-                                            <Ionicons
-                                                name={isWithdrawal ? "arrow-up-circle" : "arrow-down-circle"}
-                                                size={24}
-                                                color={isWithdrawal ? BrandColors.warning : BrandColors.success}
-                                            />
-                                        </LinearGradient>
-                                        <View style={styles.txInfo}>
-                                            <Text style={styles.txTitle}>
-                                                {isWithdrawal ? 'Retiro de fondos' : 'Pago recibido'}
-                                            </Text>
-                                            <Text style={styles.txDate}>
-                                                {new Date(tx.createdAt).toLocaleDateString()} • {new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.txAmountContainer}>
-                                            <Text style={[styles.txAmount, isWithdrawal && { color: BrandColors.warning }]}>
-                                                {isWithdrawal ? '-' : '+'}{formatCurrency(Math.abs(amount))}
-                                            </Text>
-                                            <View style={[styles.txStatusBadge, { backgroundColor: getStatusInfo(tx.status).bg }]}>
-                                                <Text style={[styles.txStatusText, { color: getStatusInfo(tx.status).color }]}>
-                                                    {getStatusInfo(tx.status).label}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    </Card>
-                                </Animated.View>
-                            );
-                        })
+                        recentTransactions.map((tx: Transaction, index: number) => (
+                            <Animated.View
+                                key={tx.id}
+                                entering={FadeInUp.delay(800 + index * 100).duration(500)}
+                            >
+                                <TransactionItem
+                                    transaction={tx}
+                                    currentUserId={user?.id?.toString()}
+                                />
+                            </Animated.View>
+                        ))
                     ) : (
                         <View style={styles.emptyState}>
                             <Ionicons name="receipt-outline" size={48} color={BrandColors.gray[300]} />
@@ -871,54 +836,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: BrandColors.primary,
         fontWeight: '600',
-    },
-    transactionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderRadius: 20,
-        marginBottom: 12,
-    },
-    txIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    txInfo: {
-        flex: 1,
-    },
-    txTitle: {
-        fontSize: 15,
-        fontWeight: 'bold',
-        color: BrandColors.gray[900],
-    },
-    txDate: {
-        fontSize: 12,
-        color: BrandColors.gray[500],
-        marginTop: 2,
-    },
-    txAmountContainer: {
-        alignItems: 'flex-end',
-    },
-    txAmount: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: BrandColors.success,
-    },
-    txStatusBadge: {
-        backgroundColor: BrandColors.success + '15',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-        marginTop: 4,
-    },
-    txStatusText: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        color: BrandColors.success,
     },
     emptyState: {
         alignItems: 'center',

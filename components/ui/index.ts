@@ -11,3 +11,4 @@ export { PinDisplay } from './PinDisplay';
 export { PinInput } from './PinInput';
 export { ProgressBar } from './ProgressBar';
 export { Skeleton } from './Skeleton';
+export { TransactionItem } from './TransactionItem';
