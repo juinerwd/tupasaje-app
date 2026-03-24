@@ -228,7 +228,7 @@ export default function PassengerDashboard() {
         if (promotion.actionType === 'RECHARGE') {
             router.push('/passenger/recharge' as any);
         } else if (promotion.actionType === 'REFERRAL') {
-            Alert.alert('Referir', 'Comparte tu código con un amigo para ganar pasajes gratis.');
+            router.push('/passenger/referrals' as any);
         } else if (promotion.actionType === 'INTERNAL' && promotion.actionValue) {
             router.push(promotion.actionValue as any);
         } else {
@@ -1230,7 +1230,7 @@ const styles = StyleSheet.create({
         gap: 16,
     },
     promotionCard: {
-        width: 300,
+        width: 320,
         borderRadius: 20,
         padding: 20,
         height: 120,

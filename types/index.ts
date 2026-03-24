@@ -22,6 +22,7 @@ export interface User {
     emailVerifiedAt?: string | null;
     username?: string;
     qrCode?: string;
+    referralCode?: string;
     role: UserRole;
     avatar?: string | null;
     bio?: string | null;
@@ -265,6 +266,7 @@ export interface Wallet {
     id: number;
     userId: number;
     balance: string;
+    promotionalBalance: string;
     heldBalance: string;
     currency: string;
     totalRecharged: string;
@@ -297,6 +299,7 @@ export enum TransactionType {
     REFUND = 'REFUND',
     REVERSAL = 'REVERSAL',
     WITHDRAWAL = 'WITHDRAWAL',
+    REFERRAL_BONUS = 'REFERRAL_BONUS',
 }
 
 // Transaction status
@@ -722,6 +725,32 @@ export interface Promotion {
     actionType: 'RECHARGE' | 'REFERRAL' | 'EXTERNAL' | 'INTERNAL';
     actionValue?: string;
     expiresAt?: string;
+}
+
+// Referral status enum
+export enum ReferralStatus {
+    PENDING = 'PENDING',
+    COMPLETED = 'COMPLETED',
+    EXPIRED = 'EXPIRED',
+    FRAUD = 'FRAUD',
+}
+
+// Referral item
+export interface ReferralItem {
+    id: string;
+    referredName: string;
+    status: ReferralStatus;
+    rewardAmount: string;
+    rewardedAt?: string;
+    createdAt: string;
+}
+
+// Referrals response
+export interface ReferralsResponse {
+    referrals: ReferralItem[];
+    completedThisMonth: number;
+    maxMonthly: number;
+    rewardAmount: string;
 }
 
 // ============================================

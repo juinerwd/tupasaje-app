@@ -1013,44 +1013,6 @@ export default function EditProfile() {
                         </View>
 
                         <View style={styles.sectionDivider} />
-
-                        {/* Security Section */}
-                        <View style={styles.securitySection}>
-                            <Text style={styles.sectionTitle}>Seguridad</Text>
-                            <View style={styles.securityItem}>
-                                <View style={styles.securityItemInfo}>
-                                    <Ionicons name="finger-print-outline" size={24} color={BrandColors.primary} />
-                                    <View style={styles.securityTextContainer}>
-                                        <Text style={styles.securityItemTitle}>Autenticación Biométrica</Text>
-                                        <Text style={styles.securityItemSubtitle}>
-                                            Usa tu huella o FaceID para confirmar pagos
-                                        </Text>
-                                    </View>
-                                </View>
-                                <Switch
-                                    value={biometricsEnabled}
-                                    onValueChange={setBiometricsEnabled}
-                                    trackColor={{ false: BrandColors.gray[300], true: BrandColors.primary }}
-                                    thumbColor={Platform.OS === 'android' ? BrandColors.white : undefined}
-                                />
-                            </View>
-
-                            <TouchableOpacity
-                                style={styles.securityItem}
-                                onPress={() => Alert.alert('Próximamente', 'La función para cambiar el PIN estará disponible pronto.')}
-                            >
-                                <View style={styles.securityItemInfo}>
-                                    <Ionicons name="key-outline" size={24} color={BrandColors.primary} />
-                                    <View style={styles.securityTextContainer}>
-                                        <Text style={styles.securityItemTitle}>Cambiar PIN de seguridad</Text>
-                                        <Text style={styles.securityItemSubtitle}>
-                                            Actualiza tu código de confirmación de 6 dígitos
-                                        </Text>
-                                    </View>
-                                </View>
-                                <Ionicons name="chevron-forward" size={20} color={BrandColors.gray[400]} />
-                            </TouchableOpacity>
-                        </View>
                     </Animated.View>
 
                     {/* Action Buttons */}

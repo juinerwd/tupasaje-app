@@ -35,12 +35,17 @@ const FAQS: FAQItem[] = [
     {
         category: 'Viajes',
         question: '¿Cómo pago mi pasaje?',
-        answer: 'Simplemente escanea el código QR que se encuentra en el vehículo del conductor. El monto se descontará automáticamente de tu saldo.',
+        answer: 'Simplemente escanea el código QR que se encuentra en el vehículo, indica el valor del pasaje y presiona pagar. El monto se descontará automáticamente de tu saldo.',
     },
     {
         category: 'Viajes',
         question: '¿Qué hago si el código QR no funciona?',
-        answer: 'Asegúrate de tener buena iluminación y que la cámara esté limpia. Si persiste el problema, puedes ingresar el número de placa del vehículo manualmente.',
+        answer: 'Asegúrate de tener buena iluminación y que la cámara esté limpia. Si persiste el problema, puedes ingresar el número de teléfono o el nombre de usuario del conductor.',
+    },
+    {
+        category: 'Viajes',
+        question: '¿Cómo puedo pedir un taxi?',
+        answer: 'Ve a la pantalla principal y toca el botón "Pedir Taxi". Indica tu ubicación actual y el destino, y presiona "Pedir Taxi".\n\nTienes dos formas de solicitar un taxi:\n1. En el mapa te saldrán los taxis disponbles en tu zona, puedes seleccionar uno de ellos y mandarle la solucitud.\n2. Puede enviar la solucitud a todos los taxistas disponibles en tu zona.',
     },
     {
         category: 'Cuenta',
@@ -151,7 +156,7 @@ export default function HelpScreen() {
 
                 <View style={styles.footer}>
                     <Text style={styles.footerText}>Versión 1.0.0</Text>
-                    <Text style={styles.footerText}>© 2024 TuPasaje. Todos los derechos reservados.</Text>
+                    <Text style={styles.footerText}>© {new Date().getFullYear()} Tu Pasaje. Todos los derechos reservados.</Text>
                 </View>
             </ScrollView>
         </SafeAreaView>

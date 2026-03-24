@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui';
 import { BrandColors } from '@/constants/theme';
 import * as walletService from '@/services/walletService';
-import { Transaction, TransactionType } from '@/types';
+import { Transaction, TransactionType, TransactionStatus } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -57,7 +57,8 @@ export default function PassengerTransactions() {
                     transactionId: item.id,
                     reference: item.reference || 'N/A',
                     amount: item.amount,
-                    paymentMethod: 'Recarga'
+                    paymentMethod: 'Recarga',
+                    status: item.status
                 }
             });
         } else {
@@ -92,13 +93,14 @@ export default function PassengerTransactions() {
 
         const getStatusColor = () => {
             switch (item.status) {
-                case 'COMPLETED':
+                case TransactionStatus.COMPLETED:
                     return BrandColors.success;
-                case 'PENDING':
+                case TransactionStatus.PENDING:
+                case TransactionStatus.PROCESSING:
                     return BrandColors.warning;
-                case 'FAILED':
+                case TransactionStatus.FAILED:
                     return BrandColors.error;
-                case 'CANCELLED':
+                case TransactionStatus.CANCELLED:
                     return BrandColors.gray[500];
                 default:
                     return BrandColors.gray[500];
@@ -107,13 +109,14 @@ export default function PassengerTransactions() {
 
         const getStatusText = () => {
             switch (item.status) {
-                case 'COMPLETED':
+                case TransactionStatus.COMPLETED:
                     return 'Completado';
-                case 'PENDING':
+                case TransactionStatus.PENDING:
+                case TransactionStatus.PROCESSING:
                     return 'Pendiente';
-                case 'FAILED':
+                case TransactionStatus.FAILED:
                     return 'Fallido';
-                case 'CANCELLED':
+                case TransactionStatus.CANCELLED:
                     return 'Cancelado';
                 default:
                     return item.status;

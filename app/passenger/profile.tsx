@@ -129,13 +129,6 @@ export default function PassengerProfile() {
             onPress: () => router.push('/passenger/notification-settings' as any),
         },
         {
-            id: 'payment-methods',
-            icon: 'card-outline',
-            title: 'Métodos de pago',
-            subtitle: 'Administra tus tarjetas',
-            onPress: () => router.push('/passenger/payment-methods' as any),
-        },
-        {
             id: 'help',
             icon: 'help-circle-outline',
             title: 'Ayuda y soporte',

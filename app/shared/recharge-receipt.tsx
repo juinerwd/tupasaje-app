@@ -1,6 +1,6 @@
 import { BrandColors } from '@/constants/theme';
 import { useAuthStore } from '@/store/authStore';
-import { UserRole } from '@/types';
+import { UserRole, TransactionStatus } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -25,15 +25,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function RechargeReceiptScreen() {
     const router = useRouter();
     const { user } = useAuthStore();
-    const { transactionId, reference, amount, paymentMethod } = useLocalSearchParams<{
+    const { transactionId, reference, amount, paymentMethod, status } = useLocalSearchParams<{
         transactionId: string;
         reference: string;
         amount: string;
         paymentMethod: string;
+        status?: string;
     }>();
 
     const scale = useSharedValue(0);
     const checkmarkScale = useSharedValue(0);
+
+    const isFailed = status === TransactionStatus.FAILED || status === 'DECLINED' || status === 'ERROR' || status === TransactionStatus.CANCELLED;
+    const isPending = status === TransactionStatus.PROCESSING || status === TransactionStatus.PENDING;
+
+    const headerTitle = isFailed ? 'Recarga Fallida' : isPending ? 'Recarga en Proceso' : '¡Recarga Exitosa!';
+    const headerSubtitle = isFailed ? 'No se pudo completar la transacción' : isPending ? 'Estamos verificando tu pago' : 'Tu saldo se ha actualizado correctamente';
+    const headerColor = isFailed ? BrandColors.error : isPending ? BrandColors.warning : BrandColors.success;
+    const headerIcon = isFailed ? 'close-circle' : isPending ? 'time' : 'checkmark-circle';
 
     useEffect(() => {
         // Animate success icon
@@ -83,9 +92,9 @@ export default function RechargeReceiptScreen() {
             <ScrollView contentContainerStyle={styles.content}>
                 {/* Success Icon */}
                 <Animated.View style={[styles.successIconContainer, successIconStyle]}>
-                    <View style={styles.successIconBackground}>
+                    <View style={[styles.successIconBackground, { backgroundColor: headerColor + '15' }]}>
                         <Animated.View style={checkmarkStyle}>
-                            <Ionicons name="checkmark-circle" size={80} color={BrandColors.success} />
+                            <Ionicons name={headerIcon as any} size={80} color={headerColor} />
                         </Animated.View>
                     </View>
                 </Animated.View>
@@ -95,16 +104,16 @@ export default function RechargeReceiptScreen() {
                     entering={FadeInDown.delay(300).duration(600).springify()}
                     style={styles.messageContainer}
                 >
-                    <Text style={styles.successTitle}>¡Recarga Exitosa!</Text>
+                    <Text style={styles.successTitle}>{headerTitle}</Text>
                     <Text style={styles.successSubtitle}>
-                        Tu saldo se ha actualizado correctamente
+                        {headerSubtitle}
                     </Text>
                 </Animated.View>
 
                 {/* Amount */}
                 <Animated.View
                     entering={FadeInUp.delay(500).duration(600).springify()}
-                    style={styles.amountContainer}
+                    style={[styles.amountContainer, { backgroundColor: headerColor }]}
                 >
                     <Text style={styles.amountLabel}>Monto Recargado</Text>
                     <Text style={styles.amountValue}>{formatCurrency(Number(amount))}</Text>
